@@ -6,6 +6,12 @@ BLF is the native recording format of Vector CANalyzer, CANoe, and related autom
 
 ---
 
+## Sample Screenshot
+
+Below is a sample viewer screenshot. The left panel shows the message table with filters applied, and the right panel shows the details for a selected CAN frame.
+
+![BLF Viewer sample](./images/preview.png)
+
 ## Features
 
 ### Automatic file association
@@ -52,7 +58,7 @@ Uses VS Code CSS variables throughout — works correctly with any light or dark
 
 ## Requirements
 
-- VS Code **1.85.0** or later
+- VS Code **1.109.0** or later
 - No external dependencies or native modules — pure TypeScript
 
 ---
@@ -76,14 +82,6 @@ BLF: Open File
 ## Extension Settings
 
 This extension does not contribute any configurable settings.
-
----
-
-## Known Issues
-
-- Sorting by column reorders the visual indicator only; rows are always returned in parse order (chronological). Full host-side sorting will be added in a future release.
-- Very large files (>500 MB uncompressed) may take several seconds to parse on first open while the extension host decompresses and indexes the BLF containers.
-- Timestamp accuracy depends on the recording tool's clock resolution. Some tools write 10 µs resolution; others write nanosecond resolution. The parser detects this from the object header flags.
 
 ---
 

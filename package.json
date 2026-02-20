@@ -2,13 +2,14 @@
   "name": "blf-viewer",
   "displayName": "BLF Viewer",
   "description": "View Binary Logging Format (BLF) CAN bus files",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "engines": {
     "vscode": "^1.109.0"
   },
   "categories": ["Other"],
   "keywords": ["BLF", "CAN bus", "automotive", "binary logging", "Vector"],
   "icon": "images/icon.png",
+  "publisher": "mafatpanah",
   "repository": {
     "type": "git",
     "url": "https://github.com/mrafatpanah/blf-viewer"
