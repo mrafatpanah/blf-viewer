@@ -1,0 +1,58 @@
+{
+  "name": "blf-viewer",
+  "displayName": "BLF Viewer",
+  "description": "View Binary Logging Format (BLF) CAN bus files",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.109.0"
+  },
+  "categories": ["Other"],
+  "keywords": ["BLF", "CAN bus", "automotive", "binary logging", "Vector"],
+  "icon": "images/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mrafatpanah/blf-viewer"
+  },
+  "license": "MIT",
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "blf.viewer",
+        "displayName": "BLF Viewer",
+        "selector": [{ "filenamePattern": "*.blf" }],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "blf.openFile",
+        "title": "Open with BLF Viewer",
+        "category": "BLF"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.0",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-cli": "^0.0.4",
+    "@vscode/test-electron": "^2.3.0",
+    "esbuild": "^0.20.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.0.0",
+    "typescript-eslint": "^8.0.0"
+  }
+}
