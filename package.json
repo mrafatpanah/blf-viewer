@@ -2,7 +2,7 @@
   "name": "blf-viewer",
   "displayName": "BLF Viewer",
   "description": "View Binary Logging Format (BLF) CAN bus files",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engines": {
     "vscode": "^1.109.0"
   },

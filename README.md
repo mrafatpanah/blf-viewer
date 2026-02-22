@@ -37,7 +37,36 @@ Narrow down messages by:
 
 ### Sortable columns
 
-Click any column header to sort by index, timestamp, arbitration ID, type, direction, channel, or DLC.
+Click any column header to sort ascending; click again to reverse. Sorting is applied on the full filtered dataset on the extension host before paging, so the order is always correct across all pages.
+
+### Resizable and reorderable columns
+
+Drag a column edge to resize it. Drag a column header to a new position to reorder. Use the **⊞ Columns** button to show or hide individual columns.
+
+### Multi-select
+
+- **Click** — single select
+- **Ctrl / Cmd + Click** — toggle individual rows
+- **Shift + Click** — select a contiguous range
+
+The selection count is shown in the toolbar.
+
+### Right-click context menu
+
+Right-click any row for quick actions:
+
+| Action                  | Description                                                     |
+| ----------------------- | --------------------------------------------------------------- |
+| Add to Filter           | Sets the ID filter to this message's arbitration ID             |
+| Show Details            | Opens the detail panel for this row                             |
+| Colorize                | Highlights the row (or selection) in a chosen color             |
+| Group by…               | Groups rows visually by type, direction, channel, or ID         |
+| Select all with same ID | Multi-selects every visible row sharing the same arbitration ID |
+| Copy row                | Copies tab-separated values to the clipboard                    |
+| Copy Arb ID             | Copies the hex arbitration ID                                   |
+| Copy data bytes         | Copies the hex byte string                                      |
+| Copy selection as CSV   | Exports all selected rows as CSV with a header row              |
+| Remove color            | Clears colorization from the row or selection                   |
 
 ### Detail panel
 
@@ -69,7 +98,8 @@ Uses VS Code CSS variables throughout — works correctly with any light or dark
 2. The BLF Viewer opens automatically as a custom editor
 3. Use the filter toolbar to search for specific messages
 4. Click any row to inspect its bytes in the detail panel on the right
-5. Click **⊞ Detail** in the top bar to show or hide the detail panel
+5. Click **⊟ Detail** in the top bar to show or hide the detail panel
+6. Right-click any row for copy, colorize, filter, and grouping options
 
 You can also open a file explicitly from the Command Palette:
 
@@ -86,6 +116,10 @@ This extension does not contribute any configurable settings.
 ---
 
 ## Release Notes
+
+### 0.2.0
+
+Resizable and reorderable columns, column visibility toggle, real host-side sorting, multi-select, right-click context menu with colorize / group / copy actions, and fixes for sort key mismatch, empty-filter ghost rows, and leading-zero ID matching.
 
 ### 0.1.0
 
