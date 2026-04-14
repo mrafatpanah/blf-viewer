@@ -14,6 +14,9 @@ export function applyFilter(messages: CANMessage[], f: FilterState): CANMessage[
   // Fast path: nothing active
   if (!idLower && !dir && !msgType && !channel) return messages;
 
+  // Pre-split the IDs into an array to avoid splitting inside the loop
+  const idLowerArr = idLower ? idLower.split(',').map(id => id.trim()).filter(id => id !== '') : [];
+
   return messages.filter(m => {
     // Direction filter
     if (dir && (m.isRx ? 'RX' : 'TX') !== dir) return false;
@@ -27,20 +30,24 @@ export function applyFilter(messages: CANMessage[], f: FilterState): CANMessage[
     // Channel filter — stored as 0-based integer string
     if (channel !== '' && String(m.channel) !== channel) return false;
 
-    // ID filter — match against every form the UI can display:
-    //   raw hex ("52"), padded-3 STD ("052"), padded-8 EXT ("00000052"),
-    //   and both with "0x" prefix.
-    if (idLower) {
+    // ID filter — matches if the message ID satisfies ANY of the user-provided ID strings
+    if (idLowerArr.length > 0) {
       const raw    = m.arbitrationId.toString(16).toLowerCase();
       const padStd = raw.padStart(3, '0');
       const padExt = raw.padStart(8, '0');
-      if (
-        !raw.includes(idLower)             &&
-        !padStd.includes(idLower)          &&
-        !padExt.includes(idLower)          &&
-        !('0x' + raw).includes(idLower)    &&
-        !('0x' + padExt).includes(idLower)
-      ) return false;
+
+      // Check if current message matches any of the IDs in the search array
+      const matchesAnyId = idLowerArr.some(id => {
+        return (
+          raw.includes(id)    ||
+          padStd.includes(id) ||
+          padExt.includes(id) ||
+          ('0x' + raw).includes(id) ||
+          ('0x' + padExt).includes(id)
+        );
+      });
+
+      if (!matchesAnyId) return false;
     }
 
     return true;
