@@ -1,10 +1,12 @@
 import * as vscode from 'vscode';
 import * as path    from 'path';
+import * as fs      from 'fs';
 
 import { BLFReader }                        from './blf-parser';
 import { applyFilter, applySort, toWire }   from './blf-host';
 import { getWebviewHtml, getNonce }         from './blf-webview';
 import { WebviewMessage }                   from './blf-types';
+import { parseDbcFile, DbcDatabase }        from './dbc-parser';
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 
@@ -40,23 +42,62 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
     let messages = await this.parseFile(document.uri.fsPath, webviewPanel);
     if (!messages) return; // parse error already posted to webview
 
-    // Handle page requests: filter → sort → slice → send
-    webviewPanel.webview.onDidReceiveMessage((req: WebviewMessage) => {
-      if (req.type !== 'requestPage') return;
+    // Per-panel DBC database (in-memory, per-session)
+    let dbcDb: DbcDatabase | null = null;
 
-      const filtered = applyFilter(messages!, req.filter);
-      const sorted   = applySort(filtered,    req.sort);
-      const page     = sorted.slice(req.startIndex, req.startIndex + req.count);
+    // Handle messages from the webview
+    webviewPanel.webview.onDidReceiveMessage(async (req: WebviewMessage) => {
 
-      webviewPanel.webview.postMessage({
-        type:          'page',
-        startIndex:    req.startIndex,
-        totalFiltered: sorted.length,
-        rows:          page.map((m, li) => toWire(m, req.startIndex + li)),
-      });
+      if (req.type === 'requestPage') {
+        const filtered = applyFilter(messages!, req.filter);
+        const sorted   = applySort(filtered,    req.sort);
+        const page     = sorted.slice(req.startIndex, req.startIndex + req.count);
+
+        webviewPanel.webview.postMessage({
+          type:          'page',
+          startIndex:    req.startIndex,
+          totalFiltered: sorted.length,
+          rows:          page.map((m, li) => toWire(m, req.startIndex + li, dbcDb)),
+        });
+        return;
+      }
+
+      if (req.type === 'openDbcFile') {
+        const picked = await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          filters: { 'DBC Files': ['dbc'] },
+          openLabel: 'Import DBC',
+        });
+        if (!picked?.length) return;
+        try {
+          const MAX_DBC_BYTES = 10 * 1024 * 1024; // 10 MB
+          const stat = fs.statSync(picked[0].fsPath);
+          if (stat.size > MAX_DBC_BYTES) {
+            throw new Error(`DBC file is too large (${(stat.size / 1024 / 1024).toFixed(1)} MB); limit is 10 MB`);
+          }
+          const text = fs.readFileSync(picked[0].fsPath, 'utf8');
+          dbcDb = parseDbcFile(text, path.basename(picked[0].fsPath));
+          webviewPanel.webview.postMessage({
+            type:         'dbcLoaded',
+            fileName:     dbcDb.fileName,
+            messageCount: dbcDb.messages.size,
+          });
+        } catch (err) {
+          webviewPanel.webview.postMessage({
+            type:    'error',
+            message: 'DBC parse error: ' + (err instanceof Error ? err.message : String(err)),
+          });
+        }
+        return;
+      }
+
+      if (req.type === 'clearDbc') {
+        dbcDb = null;
+        webviewPanel.webview.postMessage({ type: 'dbcCleared' });
+      }
     });
 
-    webviewPanel.onDidDispose(() => { messages = null; });
+    webviewPanel.onDidDispose(() => { messages = null; dbcDb = null; });
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────

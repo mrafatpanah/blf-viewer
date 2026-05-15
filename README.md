@@ -26,11 +26,20 @@ Files with hundreds of thousands of messages open instantly. The viewer renders 
 
 At a glance: total message count, recording duration, messages/sec throughput, unique arbitration IDs, active channels, RX/TX split, and CAN FD frame count.
 
+### DBC signal decoding
+
+Click the **⊕ DBC** button in the toolbar to import a `.dbc` file. Once loaded:
+
+- A badge shows the file name and the number of matched messages
+- Every matched row in the table shows a **Name** column with the DBC message name
+- Selecting a matched row shows a **Signals** section in the detail panel with each signal's raw hex value, physical value (with unit), and value-table label for enum signals (e.g. `Drive`, `Park`)
+- Click **✕** next to the badge to unload the DBC and return to raw data
+
 ### Filter toolbar
 
 Narrow down messages by:
 
-- **Arbitration ID** — hex substring match (e.g. `7e0` matches `0x07E0`, `0x17E0`, etc.)
+- **Arbitration ID** — hex substring match, or comma-separated list (e.g. `7E0,7E8`) to match multiple IDs at once
 - **Direction** — RX, TX, or both
 - **Type** — Standard CAN, CAN FD, or Error frames
 - **Channel** — individual channel or all
@@ -116,6 +125,10 @@ This extension does not contribute any configurable settings.
 ---
 
 ## Release Notes
+
+### 1.0.0
+
+DBC import and signal decoding, message name column, multi-ID filter (comma-separated), and a pure-TypeScript DBC parser with Intel/Motorola byte order, signed/unsigned signals, value tables, and comments.
 
 ### 0.2.0
 
