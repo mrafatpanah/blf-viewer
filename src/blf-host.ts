@@ -123,8 +123,10 @@ export function toWire(m: CANMessage, idx: number, dbc?: DbcDatabase | null): Wi
           : 0;
         const physStr   = physical.toFixed(dp) + (sig.unit ? ' ' + sig.unit : '');
         const hexDigits = Math.max(2, Math.ceil(sig.bitLength / 4));
-        // raw >>> 0 reinterprets as unsigned 32-bit for display
-        const rawHex    = '0x' + (raw >>> 0).toString(16).toUpperCase().padStart(hexDigits, '0');
+        // For signed signals, convert the negative value back to its unsigned bit pattern
+        // scoped to bitLength (not 32-bit, which >>> 0 would produce).
+        const rawBits = raw < 0 ? raw + 2 ** sig.bitLength : raw;
+        const rawHex  = '0x' + rawBits.toString(16).toUpperCase().padStart(hexDigits, '0');
         return {
           name: sig.name, rawHex, physical, physStr,
           unit: sig.unit, valueLabel, comment: sig.comment,

@@ -70,6 +70,11 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
         });
         if (!picked?.length) return;
         try {
+          const MAX_DBC_BYTES = 10 * 1024 * 1024; // 10 MB
+          const stat = fs.statSync(picked[0].fsPath);
+          if (stat.size > MAX_DBC_BYTES) {
+            throw new Error(`DBC file is too large (${(stat.size / 1024 / 1024).toFixed(1)} MB); limit is 10 MB`);
+          }
           const text = fs.readFileSync(picked[0].fsPath, 'utf8');
           dbcDb = parseDbcFile(text, path.basename(picked[0].fsPath));
           webviewPanel.webview.postMessage({

@@ -208,12 +208,13 @@ export function decodeSignal(
 // Intel (little-endian, @1): startBit is the LSB position.
 // Bit n → byte n>>3, bit-in-byte n&7 (0=LSB).
 function extractIntel(data: Buffer, startBit: number, length: number, signed: boolean): number {
+  if (startBit < 0) { return 0; }
   let raw = 0n;
   for (let i = 0; i < length; i++) {
     const bitPos  = startBit + i;
     const byteIdx = bitPos >> 3;
     const bitIdx  = bitPos & 7;
-    if (byteIdx < data.length) {
+    if (byteIdx >= 0 && byteIdx < data.length) {
       raw |= BigInt((data[byteIdx] >> bitIdx) & 1) << BigInt(i);
     }
   }
@@ -229,6 +230,7 @@ function extractIntel(data: Buffer, startBit: number, length: number, signed: bo
 // Traversal from MSB: decrement within byte; when at byte-LSB (n&7===0), jump
 // to the MSB of the next byte (+15 in DBC bit numbering).
 function extractMotorola(data: Buffer, startBit: number, length: number, signed: boolean): number {
+  if (startBit < 0) { return 0; }
   let raw = 0n;
   let cur = startBit;
   for (let i = 0; i < length; i++) {
