@@ -2,6 +2,20 @@
 
 All notable changes to the **BLF Viewer** extension are documented here.
 
+## [1.0.0] — 2026-05-15
+
+### Added
+
+- **DBC import** — click the **⊕ DBC** button in the toolbar to load a `.dbc` (Database CAN) file; a badge shows the file name and matched message count
+- **Signal decoding** — when a DBC is loaded, the detail panel shows a **Signals** section with each signal's raw hex value, physical value (with unit and decimal precision derived from the DBC factor), and value-table label (e.g. `Drive`, `Park`) for enum-style signals
+- **Message Name column** — a **Name** column appears automatically when a DBC is loaded, showing the DBC message name inline in the table; hidden when no DBC is active
+- **Multi-ID search** — the ID filter accepts a comma-separated list of IDs (e.g. `7E0,7E8`) to match any of the specified arbitration IDs simultaneously (contributed by [@sonerb](https://github.com/sonerb))
+- **DBC parser** — new `dbc-parser.ts` module: pure TypeScript, no dependencies; supports `BO_` message blocks, `SG_` signals (Intel/Motorola byte order, signed/unsigned), `CM_` comments, `VAL_` value tables, and extended IDs (bit 31 mask)
+
+### Changed
+
+- `toWire` now accepts an optional `DbcDatabase` parameter; decoded `msgName` and `signals` fields are included in the wire format only when a DBC is loaded, keeping payloads lean for DBC-free sessions
+
 ## [0.2.0] — 2026-02-22
 
 ### Added

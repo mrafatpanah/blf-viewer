@@ -60,6 +60,10 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
     <span class="sel-count" id="selCount" style="display:none"></span>
     <span class="result-count" id="rCount">—</span>
     <button class="btn" id="btnClear">✕ Clear</button>
+    <span style="width:1px;height:18px;background:var(--border);flex-shrink:0"></span>
+    <button class="btn" id="btnImportDbc" title="Import DBC file">⊕ DBC</button>
+    <span class="dbc-badge" id="dbcBadge" style="display:none"></span>
+    <button class="btn" id="btnClearDbc" style="display:none" title="Remove DBC">✕</button>
   </div>
 
   <!-- Active grouping banner -->
@@ -378,6 +382,29 @@ const CSS = `
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: rgba(128,128,128,.3); border-radius: 4px; }
   ::-webkit-scrollbar-thumb:hover { background: rgba(128,128,128,.5); }
+
+  /* DBC badge in toolbar */
+  .dbc-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 10px; font-size: 11px;
+    background: rgba(115,201,145,.15); color: var(--green);
+    font-family: var(--mono); max-width: 220px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* Signal section in detail panel */
+  .sig-section-head {
+    padding: 8px 14px 4px; font-size: 10px; text-transform: uppercase;
+    letter-spacing: .07em; color: var(--fg2); font-weight: 600;
+    border-top: 1px solid var(--border); margin-top: 4px;
+  }
+  .sig-item { padding: 6px 14px; border-bottom: 1px solid rgba(128,128,128,.07); }
+  .sig-name { font-family: var(--mono); font-size: 12px; color: var(--purple); font-weight: 500; }
+  .sig-vals { display: flex; gap: 12px; margin-top: 3px; flex-wrap: wrap; align-items: baseline; }
+  .sig-raw  { font-family: var(--mono); font-size: 11px; color: var(--yellow); }
+  .sig-phys { font-family: var(--mono); font-size: 11px; color: var(--green); font-weight: 500; }
+  .sig-label{ font-family: var(--mono); font-size: 11px; color: var(--purple); }
+  .sig-comment { font-size: 11px; color: var(--fg2); font-style: italic; margin-top: 2px; }
 `;
 
 // ── Webview runtime JS ────────────────────────────────────────────────────────
@@ -404,6 +431,7 @@ const DEFAULT_COLS = [
   { key:'i',     label:'#',       width:52,  minWidth:36,  sortable:true,  visible:true  },
   { key:'t',     label:'Time(s)', width:108, minWidth:70,  sortable:true,  visible:true  },
   { key:'id',    label:'Arb ID',  width:100, minWidth:60,  sortable:true,  visible:true  },
+  { key:'name',  label:'Name',    width:160, minWidth:80,  sortable:false, visible:false },
   { key:'type',  label:'Type',    width:54,  minWidth:40,  sortable:true,  visible:true  },
   { key:'dir',   label:'Dir',     width:48,  minWidth:36,  sortable:true,  visible:true  },
   { key:'ch',    label:'Ch',      width:40,  minWidth:30,  sortable:true,  visible:true  },
@@ -433,6 +461,10 @@ let sort   = { col:'i', dir:'asc' };
 
 // Colorization: Map<rowI, colorName>
 const rowColors = new Map();
+
+// DBC state
+let dbcLoaded   = false;
+let dbcFileName = '';
 
 // Grouping field key or null
 let groupBy = null;
@@ -796,6 +828,9 @@ function buildRowHTML(m) {
       case 'i':     content = '<span class="t-idx">'   + (m.i+1)    + '</span>'; break;
       case 't':     content = '<span class="t-time">'  + m.t        + '</span>'; break;
       case 'id':    content = '<span class="t-id">'    + esc(m.id)  + '</span>'; break;
+      case 'name':  content = m.msgName
+                      ? '<span style="color:var(--purple);font-weight:500">' + esc(m.msgName) + '</span>'
+                      : '<span style="color:var(--fg2);font-size:11px">—</span>'; break;
       case 'type':  content = '<span class="badge ' + tc + '">'     + m.type + '</span>'; break;
       case 'dir':   content = '<span class="badge ' + dc + '">'     + m.dir  + '</span>'; break;
       case 'ch':    content = m.ch;  break;
@@ -1146,6 +1181,7 @@ function showDetail(m) {
     dr('Index',     m.i + 1) +
     dr('Rel. Time', '<span style="color:var(--blue)">' + m.t + ' s</span>') +
     dr('Arb. ID',   '<span style="color:#e8c8a0">' + esc(m.id) + '</span>') +
+    (m.msgName ? dr('Name', '<span style="color:var(--purple);font-weight:500">' + esc(m.msgName) + '</span>') : '') +
     dr('Type',      m.type) +
     dr('Direction', m.dir) +
     dr('Channel',   m.ch) +
@@ -1172,6 +1208,25 @@ function showDetail(m) {
     html += '</table></div>';
   } else {
     html += '<div style="padding:8px 14px;color:var(--fg2);font-size:12px">No data bytes</div>';
+  }
+
+  // Decoded signals section (shown when a DBC is loaded and the message matched)
+  if (m.signals && m.signals.length > 0) {
+    html += '<div class="sig-section-head">Signals</div>';
+    m.signals.forEach(s => {
+      const valPart = s.valueLabel
+        ? '<span class="sig-label">' + esc(s.valueLabel) + '</span>'
+        : '<span class="sig-phys">'  + esc(s.physStr)    + '</span>';
+      html +=
+        '<div class="sig-item">' +
+          '<div class="sig-name">' + esc(s.name) + '</div>' +
+          '<div class="sig-vals">' +
+            '<span class="sig-raw">' + esc(s.rawHex) + '</span>' +
+            valPart +
+          '</div>' +
+          (s.comment ? '<div class="sig-comment">' + esc(s.comment) + '</div>' : '') +
+        '</div>';
+    });
   }
 
   detailBody.innerHTML = html;
@@ -1214,6 +1269,14 @@ document.getElementById('btnClear').addEventListener('click', () => {
 document.getElementById('btnDetail').addEventListener('click', function() {
   detailPanel.classList.toggle('hidden');
   this.classList.toggle('active');
+});
+
+document.getElementById('btnImportDbc').addEventListener('click', () => {
+  vscode.postMessage({ type: 'openDbcFile' });
+});
+
+document.getElementById('btnClearDbc').addEventListener('click', () => {
+  vscode.postMessage({ type: 'clearDbc' });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1310,6 +1373,45 @@ window.addEventListener('message', ({ data: msg }) => {
       '<div style="color:#f48771;font-weight:600;margin-bottom:8px">⚠ Parse error</div>' +
       '<pre style="font-family:var(--mono);font-size:12px;white-space:pre-wrap">' + esc(msg.message) + '</pre>' +
       '</div>';
+  }
+
+  // ── dbcLoaded ─────────────────────────────────────────────────────────────
+  else if (msg.type === 'dbcLoaded') {
+    dbcLoaded   = true;
+    dbcFileName = msg.fileName;
+
+    const badge    = document.getElementById('dbcBadge');
+    const clearBtn = document.getElementById('btnClearDbc');
+    if (badge)    { badge.textContent = msg.fileName + '  (' + msg.messageCount + ' msg)'; badge.style.display = 'inline-flex'; }
+    if (clearBtn) { clearBtn.style.display = 'inline-flex'; }
+
+    // Show the Name column
+    const nameCol = cols.find(c => c.key === 'name');
+    if (nameCol) { nameCol.visible = true; }
+    buildHeader();
+
+    showToast('DBC loaded: ' + msg.fileName);
+
+    // Invalidate page cache — cached rows pre-date the DBC and lack msgName/signals
+    resetAndRefetch();
+  }
+
+  // ── dbcCleared ────────────────────────────────────────────────────────────
+  else if (msg.type === 'dbcCleared') {
+    dbcLoaded   = false;
+    dbcFileName = '';
+
+    const badge    = document.getElementById('dbcBadge');
+    const clearBtn = document.getElementById('btnClearDbc');
+    if (badge)    { badge.style.display = 'none'; }
+    if (clearBtn) { clearBtn.style.display = 'none'; }
+
+    // Hide the Name column
+    const nameCol = cols.find(c => c.key === 'name');
+    if (nameCol) { nameCol.visible = false; }
+    buildHeader();
+
+    resetAndRefetch();
   }
 });
 

@@ -15,25 +15,40 @@ export interface SortState {
 
 // Messages sent from webview → host
 export type WebviewMessage =
-  | { type: 'requestPage'; startIndex: number; count: number; filter: FilterState; sort: SortState; };
+  | { type: 'requestPage'; startIndex: number; count: number; filter: FilterState; sort: SortState; }
+  | { type: 'openDbcFile' }
+  | { type: 'clearDbc' };
+
+// Decoded signal value from a DBC database
+export interface WireSignal {
+  name:        string;
+  rawHex:      string;    // e.g. "0x2710" — pre-formatted on host
+  physical:    number;
+  physStr:     string;    // e.g. "2710.0 rpm" — pre-formatted on host
+  unit:        string;
+  valueLabel?: string;    // from VAL_ table, e.g. "Drive"
+  comment?:    string;
+}
 
 // Lean wire format — only what the webview renders per row
 export interface WireMessage {
-  i:     number;           // position in the filtered+sorted result set
-  t:     string;           // formatted relative timestamp
-  id:    string;           // formatted arb ID string  e.g. "0x1A2B3C4D"
-  rawId: number;           // raw integer arb ID (for sorting / filter by same ID)
-  type:  'STD' | 'FD' | 'ERR';
-  dir:   'RX' | 'TX';
-  ch:    number;
-  dlc:   number;
-  data:  string;           // "AA BB CC DD"
-  flags: string;           // "EXT RTR BRS ESI" — space-separated active flags
-  ext:   boolean;
-  rtr:   boolean;
-  brs:   boolean;
-  esi:   boolean;
-  err:   boolean;
+  i:        number;           // position in the filtered+sorted result set
+  t:        string;           // formatted relative timestamp
+  id:       string;           // formatted arb ID string  e.g. "0x1A2B3C4D"
+  rawId:    number;           // raw integer arb ID (for sorting / filter by same ID)
+  type:     'STD' | 'FD' | 'ERR';
+  dir:      'RX' | 'TX';
+  ch:       number;
+  dlc:      number;
+  data:     string;           // "AA BB CC DD"
+  flags:    string;           // "EXT RTR BRS ESI" — space-separated active flags
+  ext:      boolean;
+  rtr:      boolean;
+  brs:      boolean;
+  esi:      boolean;
+  err:      boolean;
+  msgName?: string;           // DBC message name, undefined when no DBC or no match
+  signals?: WireSignal[];     // undefined = no DBC loaded; [] = DBC match with no signals
 }
 
 // Messages sent from host → webview
@@ -60,4 +75,12 @@ export type HostMessage =
   | {
       type:    'error';
       message: string;
+    }
+  | {
+      type:         'dbcLoaded';
+      fileName:     string;
+      messageCount: number;
+    }
+  | {
+      type: 'dbcCleared';
     };

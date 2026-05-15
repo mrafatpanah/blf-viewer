@@ -3,7 +3,8 @@
 // Imported by blfViewProvider.ts.
 
 import { CANMessage } from './blf-parser';
-import { FilterState, SortState, WireMessage } from './blf-types';
+import { DbcDatabase, decodeSignal } from './dbc-parser';
+import { FilterState, SortState, WireMessage, WireSignal } from './blf-types';
 
 // ── Filter ────────────────────────────────────────────────────────────────────
 
@@ -101,12 +102,36 @@ export function applySort(messages: CANMessage[], s: SortState): CANMessage[] {
 
 // ── Wire format converter ─────────────────────────────────────────────────────
 
-export function toWire(m: CANMessage, idx: number): WireMessage {
+export function toWire(m: CANMessage, idx: number, dbc?: DbcDatabase | null): WireMessage {
   const flagsList: string[] = [];
   if (m.isExtendedId)        flagsList.push('EXT');
   if (m.isRemoteFrame)       flagsList.push('RTR');
   if (m.bitrateSwitch)       flagsList.push('BRS');
   if (m.errorStateIndicator) flagsList.push('ESI');
+
+  let msgName: string | undefined;
+  let signals: WireSignal[] | undefined;
+
+  if (dbc) {
+    const dbcMsg = dbc.messages.get(m.arbitrationId);
+    if (dbcMsg) {
+      msgName = dbcMsg.name;
+      signals = dbcMsg.signals.map(sig => {
+        const { raw, physical, valueLabel } = decodeSignal(m.data, sig);
+        const dp = sig.factor > 0 && sig.factor < 1
+          ? Math.min(6, Math.ceil(-Math.log10(sig.factor)))
+          : 0;
+        const physStr   = physical.toFixed(dp) + (sig.unit ? ' ' + sig.unit : '');
+        const hexDigits = Math.max(2, Math.ceil(sig.bitLength / 4));
+        // raw >>> 0 reinterprets as unsigned 32-bit for display
+        const rawHex    = '0x' + (raw >>> 0).toString(16).toUpperCase().padStart(hexDigits, '0');
+        return {
+          name: sig.name, rawHex, physical, physStr,
+          unit: sig.unit, valueLabel, comment: sig.comment,
+        };
+      });
+    }
+  }
 
   return {
     i:     idx,
@@ -126,5 +151,7 @@ export function toWire(m: CANMessage, idx: number): WireMessage {
     brs:   m.bitrateSwitch       ?? false,
     esi:   m.errorStateIndicator ?? false,
     err:   m.isErrorFrame        ?? false,
+    msgName,
+    signals,
   };
 }
