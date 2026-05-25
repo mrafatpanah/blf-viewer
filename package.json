@@ -57,7 +57,7 @@
     "pretest": "tsc --project tsconfig.json",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "tsc --outDir out && vscode-test"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.0",

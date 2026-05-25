@@ -9,7 +9,7 @@ export interface FilterState {
 }
 
 export interface SortState {
-  col: 'i' | 't' | 'id' | 'type' | 'dir' | 'ch' | 'dlc';
+  col: 'i' | 't' | 'utc' | 'id' | 'type' | 'dir' | 'ch' | 'dlc';
   dir: 'asc' | 'desc';
 }
 
@@ -34,6 +34,7 @@ export interface WireSignal {
 export interface WireMessage {
   i:        number;           // position in the filtered+sorted result set
   t:        string;           // formatted relative timestamp
+  utc:      string;           // formatted absolute UTC timestamp
   id:       string;           // formatted arb ID string  e.g. "0x1A2B3C4D"
   rawId:    number;           // raw integer arb ID (for sorting / filter by same ID)
   type:     'STD' | 'FD' | 'ERR';
