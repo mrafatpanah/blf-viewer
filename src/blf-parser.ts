@@ -148,6 +148,11 @@ function systemTimeToTimestamp(st: TSystemTime): number {
   }
 }
 
+export function canFdDlcToLength(dlc: number): number {
+  const map = [0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64];
+  return map[dlc & 0x0f] ?? 0;
+}
+
 // BLF Reader class
 export class BLFReader {
   private filePath: string;
@@ -522,7 +527,8 @@ export class BLFReader {
       const validBytes = buffer.readUInt8(pos); pos += 1;
       pos += 5; // reserved
 
-      const dataLen = Math.min(validBytes, 64, buffer.length - pos);
+      const requestedLen = validBytes > 0 ? validBytes : canFdDlcToLength(dlc);
+      const dataLen = Math.min(requestedLen, 64, buffer.length - pos);
       const canData = buffer.slice(pos, pos + dataLen);
 
       return {
@@ -553,7 +559,7 @@ export class BLFReader {
   ): CANMessage | null {
     try {
       let pos = header.headerSize;
-      if (buffer.length < pos + 32) return null;
+      if (buffer.length < pos + 40) return null;
 
       const channel = buffer.readUInt8(pos); pos += 1;
       const dlc = buffer.readUInt8(pos); pos += 1;
@@ -568,13 +574,15 @@ export class BLFReader {
       pos += 4; // time offset CRC del
       pos += 2; // bit count
       const dir = buffer.readUInt8(pos); pos += 1;
-      const extDataOffset = buffer.readUInt8(pos); pos += 1;
+      pos += 1; // ext data offset (not the normal payload offset)
       pos += 4; // crc
 
-      // If extDataOffset is set, data starts at header_size + extDataOffset
-      const dataStart = extDataOffset ? header.headerSize + extDataOffset : pos;
-      const dataLen = Math.min(validBytes, 64, buffer.length - dataStart);
-      const canData = buffer.slice(dataStart, dataStart + dataLen).toString('hex');
+      // CAN_FD_MESSAGE_64 stores the inline payload immediately after the fixed body.
+      // extDataOffset describes optional extended data and must not be used as the CAN payload start.
+      const dataStart = pos;
+      const requestedLen = validBytes > 0 ? validBytes : canFdDlcToLength(dlc);
+      const dataLen = Math.min(requestedLen, 64, buffer.length - dataStart);
+      const canData = buffer.slice(dataStart, dataStart + dataLen);
 
       return {
         relativeTimestamp: relTs,
@@ -587,7 +595,7 @@ export class BLFReader {
         isFd: !!(flags & 0x1000),
         bitrateSwitch: !!(flags & 0x2000),
         errorStateIndicator: !!(flags & 0x4000),
-        data: Buffer.from(canData, 'hex'),
+        data: canData,
         channel: channel > 0 ? channel - 1 : 0,
       };
     } catch {

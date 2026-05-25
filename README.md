@@ -48,6 +48,8 @@ Narrow down messages by:
 
 Click any column header to sort ascending; click again to reverse. Sorting is applied on the full filtered dataset on the extension host before paging, so the order is always correct across all pages.
 
+The table includes both the original relative **Time(s)** column and a default-visible **UTC** column with ISO UTC timestamps.
+
 ### Resizable and reorderable columns
 
 Drag a column edge to resize it. Drag a column header to a new position to reorder. Use the **⊞ Columns** button to show or hide individual columns.
@@ -86,6 +88,7 @@ Select any row to see the full message breakdown: byte grid, hex/decimal/binary 
 - CAN 2.0A — 11-bit standard frames
 - CAN 2.0B — 29-bit extended frames
 - CAN FD — with Bit Rate Switch (BRS) and Error State Indicator (ESI)
+- CAN FD Message 64 payloads — decoded with the CAN FD DLC-to-length mapping so 12/16/20/24/32/48/64-byte payloads display correctly
 - Error frames
 
 ### Theme adaptive
@@ -125,6 +128,10 @@ This extension does not contribute any configurable settings.
 ---
 
 ## Release Notes
+
+### 1.0.1
+
+Fixed CAN_FD_MESSAGE_64 payload parsing for CAN FD BLF files where DATA could be empty or truncated, including correct CAN FD DLC-to-payload-length mapping. Added a UTC timestamp column while preserving the original relative Time(s) column.
 
 ### 1.0.0
 

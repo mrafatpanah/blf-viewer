@@ -73,6 +73,9 @@ export function applySort(messages: CANMessage[], s: SortState): CANMessage[] {
       case 't':
         cmp = a.relativeTimestamp - b.relativeTimestamp; break;
 
+      case 'utc':
+        cmp = a.absoluteTimestamp - b.absoluteTimestamp; break;
+
       // Webview column key is 'id' (matches DEFAULT_COLS[].key)
       case 'id':
         cmp = a.arbitrationId - b.arbitrationId; break;
@@ -138,6 +141,7 @@ export function toWire(m: CANMessage, idx: number, dbc?: DbcDatabase | null): Wi
   return {
     i:     idx,
     t:     m.relativeTimestamp.toFixed(7),
+    utc:   new Date(m.absoluteTimestamp * 1000).toISOString(),
     id:    m.isExtendedId
              ? '0x' + m.arbitrationId.toString(16).padStart(8, '0').toUpperCase()
              : m.arbitrationId.toString(16).padStart(3, '0').toUpperCase(),

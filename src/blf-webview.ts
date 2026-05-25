@@ -430,6 +430,7 @@ const PAGE_SZ  = 60;   // rows per postMessage round-trip
 const DEFAULT_COLS = [
   { key:'i',     label:'#',       width:52,  minWidth:36,  sortable:true,  visible:true  },
   { key:'t',     label:'Time(s)', width:108, minWidth:70,  sortable:true,  visible:true  },
+  { key:'utc',   label:'UTC',     width:178, minWidth:140, sortable:true,  visible:true  },
   { key:'id',    label:'Arb ID',  width:100, minWidth:60,  sortable:true,  visible:true  },
   { key:'name',  label:'Name',    width:160, minWidth:80,  sortable:false, visible:false },
   { key:'type',  label:'Type',    width:54,  minWidth:40,  sortable:true,  visible:true  },
@@ -827,6 +828,7 @@ function buildRowHTML(m) {
     switch (col.key) {
       case 'i':     content = '<span class="t-idx">'   + (m.i+1)    + '</span>'; break;
       case 't':     content = '<span class="t-time">'  + m.t        + '</span>'; break;
+      case 'utc':   content = '<span class="t-time">'  + m.utc      + '</span>'; break;
       case 'id':    content = '<span class="t-id">'    + esc(m.id)  + '</span>'; break;
       case 'name':  content = m.msgName
                       ? '<span style="color:var(--purple);font-weight:500">' + esc(m.msgName) + '</span>'
@@ -1003,7 +1005,7 @@ function showContextMenu(x, y, mi) {
 
   bind('cxCopyRow', () => {
     if (!m) return;
-    copyText([m.i+1, m.t, m.id, m.type, m.dir, m.ch, m.dlc, m.data, m.flags].join('\\t'));
+    copyText([m.i+1, m.t, m.utc, m.id, m.type, m.dir, m.ch, m.dlc, m.data, m.flags].join('\\t'));
     closeCtxMenu();
   });
 
@@ -1011,13 +1013,13 @@ function showContextMenu(x, y, mi) {
   bind('cxCopyData', () => { if (m) copyText(m.data);  closeCtxMenu(); });
 
   bind('cxCopyCsv', () => {
-    const rows = [['#','Time','Arb ID','Type','Dir','Ch','DLC','Data','Flags'].join(',')];
+    const rows = [['#','Time','UTC','Arb ID','Type','Dir','Ch','DLC','Data','Flags'].join(',')];
     const all  = [];
     pageCache.forEach(page => page.forEach(r => {
       if (selectedSet.has(r.i) || r.i === selectedRowI) all.push(r);
     }));
     all.sort((a,b) => a.i - b.i).forEach(r => {
-      rows.push([r.i+1, r.t, r.id, r.type, r.dir, r.ch, r.dlc, '"'+r.data+'"', r.flags].join(','));
+      rows.push([r.i+1, r.t, r.utc, r.id, r.type, r.dir, r.ch, r.dlc, '"'+r.data+'"', r.flags].join(','));
     });
     copyText(rows.join('\\n'));
     closeCtxMenu();
@@ -1180,6 +1182,7 @@ function showDetail(m) {
   let html =
     dr('Index',     m.i + 1) +
     dr('Rel. Time', '<span style="color:var(--blue)">' + m.t + ' s</span>') +
+    dr('UTC',       '<span style="color:var(--blue)">' + esc(m.utc) + '</span>') +
     dr('Arb. ID',   '<span style="color:#e8c8a0">' + esc(m.id) + '</span>') +
     (m.msgName ? dr('Name', '<span style="color:var(--purple);font-weight:500">' + esc(m.msgName) + '</span>') : '') +
     dr('Type',      m.type) +

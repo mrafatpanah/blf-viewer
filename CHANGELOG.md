@@ -2,6 +2,17 @@
 
 All notable changes to the **BLF Viewer** extension are documented here.
 
+## [1.0.1] — 2026-05-25
+
+### Added
+
+- Added UTC timestamp column while preserving the original relative Time column.
+
+### Fixed
+
+- Fixed CAN_FD_MESSAGE_64 payload parsing for CAN FD BLF files where DATA could be empty or truncated.
+- Correctly maps CAN FD DLC values to actual payload lengths.
+
 ## [1.0.0] — 2026-05-15
 
 ### Added

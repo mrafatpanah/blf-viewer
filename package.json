@@ -2,7 +2,7 @@
   "name": "blf-viewer",
   "displayName": "BLF Viewer",
   "description": "View Binary Logging Format (BLF) CAN bus files",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "engines": {
     "vscode": "^1.109.0"
   },
@@ -43,7 +43,7 @@
     "package": "npm run check-types && npm run lint && node esbuild.js --production",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "tsc --outDir out && vscode-test"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.0",
