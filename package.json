@@ -1,6 +1,6 @@
 {
-  "name": "blf-viewer",
-  "displayName": "BLF Viewer",
+  "name": "blf-viewer-canfd",
+  "displayName": "BLF Viewer CAN FD",
   "description": "View Binary Logging Format (BLF) CAN bus files",
   "version": "1.0.1",
   "engines": {
@@ -9,10 +9,10 @@
   "categories": ["Other"],
   "keywords": ["BLF", "CAN bus", "automotive", "binary logging", "Vector"],
   "icon": "images/icon.png",
-  "publisher": "mafatpanah",
+  "publisher": "zhoulufeng",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mrafatpanah/blf-viewer"
+    "url": "https://github.com/lofyzhou/blf-viewer"
   },
   "license": "MIT",
   "activationEvents": [],
