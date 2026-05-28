@@ -3,6 +3,7 @@
 
 export interface FilterState {
   id:      string;   // hex string, case-insensitive substring match
+  data:    string;   // hex byte sequence, case-insensitive payload match
   dir:     string;   // '' | 'RX' | 'TX'
   msgType: string;   // '' | 'STD' | 'FD' | 'ERR'
   channel: string;   // '' | '0' | '1' | ...
@@ -16,6 +17,7 @@ export interface SortState {
 // Messages sent from webview → host
 export type WebviewMessage =
   | { type: 'requestPage'; startIndex: number; count: number; filter: FilterState; sort: SortState; }
+  | { type: 'searchFirst'; filter: FilterState; sort: SortState; search: FilterState; }
   | { type: 'openDbcFile' }
   | { type: 'clearDbc' };
 
@@ -72,6 +74,12 @@ export type HostMessage =
       startIndex:    number;
       totalFiltered: number;
       rows:          WireMessage[];
+    }
+  | {
+      type:    'searchResult';
+      index:   number;
+      row?:    WireMessage;
+      message?: string;
     }
   | {
       type:    'error';

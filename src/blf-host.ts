@@ -9,15 +9,39 @@ import { FilterState, SortState, WireMessage, WireSignal } from './blf-types';
 // ── Filter ────────────────────────────────────────────────────────────────────
 
 export function applyFilter(messages: CANMessage[], f: FilterState): CANMessage[] {
-  const idLower = f.id.toLowerCase().trim();
-  const { dir, msgType, channel } = f;
+  const criteria = compileFilterCriteria(f);
 
   // Fast path: nothing active
-  if (!idLower && !dir && !msgType && !channel) { return messages; }
+  if (!criteria.active) { return messages; }
+
+  return messages.filter(m => matchesFilterCriteria(m, criteria));
+}
+
+export function findFirstMatchingIndex(messages: CANMessage[], search: FilterState): number {
+  const criteria = compileFilterCriteria(search);
+  if (!criteria.active) { return -1; }
+
+  return messages.findIndex(m => matchesFilterCriteria(m, criteria));
+}
+
+type Seg = { idPart: string; chNum: number | null };
+
+interface CompiledFilterCriteria {
+  parsedSegs: Seg[];
+  dataLower: string;
+  dir: string;
+  msgType: string;
+  channel: string;
+  active: boolean;
+}
+
+function compileFilterCriteria(f: FilterState): CompiledFilterCriteria {
+  const idLower = f.id.toLowerCase().trim();
+  const dataLower = normalizeDataFilter(f.data);
+  const { dir, msgType, channel } = f;
 
   // Pre-parse ID segments, supporting optional @channel suffix per segment.
   // Malformed segments (empty id, non-integer channel, or missing either part) are dropped.
-  type Seg = { idPart: string; chNum: number | null };
   const parsedSegs: Seg[] = idLower
     ? idLower
         .split(',')
@@ -34,47 +58,66 @@ export function applyFilter(messages: CANMessage[], f: FilterState): CANMessage[
         .filter((s): s is Seg => s !== null)
     : [];
 
-  return messages.filter(m => {
-    // Direction filter
-    if (dir && (m.isRx ? 'RX' : 'TX') !== dir) { return false; }
+  return {
+    parsedSegs,
+    dataLower,
+    dir,
+    msgType,
+    channel,
+    active: Boolean(parsedSegs.length || dataLower || dir || msgType || channel),
+  };
+}
 
-    // Type filter
-    if (msgType) {
-      const t = m.isErrorFrame ? 'ERR' : m.isFd ? 'FD' : 'STD';
-      if (t !== msgType) { return false; }
-    }
+function normalizeDataFilter(value: string | undefined): string {
+  return (value ?? '').replace(/0x/gi, '').replace(/[^0-9a-f]/gi, '').toLowerCase();
+}
 
-    // ID + channel filter
-    if (parsedSegs.length > 0) {
-      const raw    = m.arbitrationId.toString(16).toLowerCase();
-      const padStd = raw.padStart(3, '0');
-      const padExt = raw.padStart(8, '0');
+function matchesFilterCriteria(m: CANMessage, criteria: CompiledFilterCriteria): boolean {
+  const { parsedSegs, dataLower, dir, msgType, channel } = criteria;
 
-      const matchesAny = parsedSegs.some(({ idPart, chNum }) => {
-        // @-qualified segment: use its own channel, bypass global dropdown
-        // Plain segment: respect global channel dropdown
-        const chOk = chNum !== null
-          ? m.channel === chNum
-          : (channel === '' || String(m.channel) === channel);
-        if (!chOk) { return false; }
+  // Direction filter
+  if (dir && (m.isRx ? 'RX' : 'TX') !== dir) { return false; }
 
-        return (
-          raw.includes(idPart)    ||
-          padStd.includes(idPart) ||
-          padExt.includes(idPart) ||
-          ('0x' + raw).includes(idPart) ||
-          ('0x' + padExt).includes(idPart)
-        );
-      });
+  // Type filter
+  if (msgType) {
+    const t = m.isErrorFrame ? 'ERR' : m.isFd ? 'FD' : 'STD';
+    if (t !== msgType) { return false; }
+  }
 
-      if (!matchesAny) { return false; }
-    } else {
-      // No ID filter: global channel filter only
-      if (channel !== '' && String(m.channel) !== channel) { return false; }
-    }
+  // Data filter — matches a contiguous payload byte sequence
+  if (dataLower && !m.data.toString('hex').toLowerCase().includes(dataLower)) {
+    return false;
+  }
 
-    return true;
-  });
+  // ID + channel filter (supports id@channel segments)
+  if (parsedSegs.length > 0) {
+    const raw    = m.arbitrationId.toString(16).toLowerCase();
+    const padStd = raw.padStart(3, '0');
+    const padExt = raw.padStart(8, '0');
+
+    const matchesAny = parsedSegs.some(({ idPart, chNum }) => {
+      // @-qualified segment: use its own channel, bypass global dropdown
+      const chOk = chNum !== null
+        ? m.channel === chNum
+        : (channel === '' || String(m.channel) === channel);
+      if (!chOk) { return false; }
+
+      return (
+        raw.includes(idPart)    ||
+        padStd.includes(idPart) ||
+        padExt.includes(idPart) ||
+        ('0x' + raw).includes(idPart) ||
+        ('0x' + padExt).includes(idPart)
+      );
+    });
+
+    if (!matchesAny) { return false; }
+  } else {
+    // No ID filter: global channel filter only
+    if (channel !== '' && String(m.channel) !== channel) { return false; }
+  }
+
+  return true;
 }
 
 // ── Sort ──────────────────────────────────────────────────────────────────────

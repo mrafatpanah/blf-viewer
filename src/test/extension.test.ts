@@ -4,6 +4,7 @@ import * as assert from 'assert';
 // as well as import your extension to test it
 import * as vscode from 'vscode';
 import { BLFReader, CANMessage, canFdDlcToLength } from '../blf-parser';
+import { applyFilter, findFirstMatchingIndex } from '../blf-host';
 // import * as myExtension from '../../extension';
 
 suite('Extension Test Suite', () => {
@@ -36,6 +37,39 @@ suite('BLF parser', () => {
 
 		assert.deepStrictEqual(data.slice(0, 8), [0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7]);
 		assert.strictEqual(msg.data.length, 16);
+	});
+});
+
+suite('BLF host filters', () => {
+	test('filters messages by contiguous payload byte sequence', () => {
+		const messages = [
+			makeMessage([0x01, 0x3e, 0x80, 0x02], 0x100),
+			makeMessage([0x3e, 0x7f, 0x80], 0x101),
+			makeMessage([0x10, 0x22, 0xf1, 0x90, 0x30], 0x102),
+		];
+
+		const spaced = applyFilter(messages, makeFilter({ data: '3E 80' }));
+		const compact = applyFilter(messages, makeFilter({ data: '3e80' }));
+		const prefixed = applyFilter(messages, makeFilter({ data: '0x3E 0x80' }));
+		const udsDid = applyFilter(messages, makeFilter({ data: '22 F1 90' }));
+
+		assert.deepStrictEqual(spaced.map(m => m.arbitrationId), [0x100]);
+		assert.deepStrictEqual(compact.map(m => m.arbitrationId), [0x100]);
+		assert.deepStrictEqual(prefixed.map(m => m.arbitrationId), [0x100]);
+		assert.deepStrictEqual(udsDid.map(m => m.arbitrationId), [0x102]);
+	});
+
+	test('finds first matching row without filtering the result set', () => {
+		const messages = [
+			makeMessage([0x10, 0x01], 0x100),
+			makeMessage([0x22, 0xf1, 0x90], 0x101),
+			makeMessage([0x22, 0xf1, 0x90], 0x102),
+		];
+
+		const index = findFirstMatchingIndex(messages, makeFilter({ data: '22 F1 90' }));
+
+		assert.strictEqual(index, 1);
+		assert.strictEqual(messages.length, 3);
 	});
 });
 
@@ -77,4 +111,29 @@ function parseCanFdMessage64(dlc: number, validBytes = 0, extDataOffset = 0): CA
 
 	assert.ok(msg);
 	return msg;
+}
+
+function makeFilter(overrides: Partial<Parameters<typeof applyFilter>[1]> = {}): Parameters<typeof applyFilter>[1] {
+	return {
+		id: '',
+		data: '',
+		dir: '',
+		msgType: '',
+		channel: '',
+		...overrides,
+	};
+}
+
+function makeMessage(data: number[], arbitrationId: number): CANMessage {
+	return {
+		relativeTimestamp: 0,
+		absoluteTimestamp: 0,
+		arbitrationId,
+		isExtendedId: false,
+		isRemoteFrame: false,
+		isRx: true,
+		dlc: data.length,
+		data: Buffer.from(data),
+		channel: 0,
+	};
 }
