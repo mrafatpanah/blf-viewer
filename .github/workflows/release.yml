@@ -29,6 +29,11 @@ jobs:
       - name: Package VSIX
         run: npx @vscode/vsce package --no-dependencies
 
+      - name: Publish to VS Code Marketplace
+        run: npx @vscode/vsce publish --packagePath *.vsix -p "$VSCE_PAT"
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
       - name: Create GitHub Release
         run: |
           gh release create "${{ github.ref_name }}" \
