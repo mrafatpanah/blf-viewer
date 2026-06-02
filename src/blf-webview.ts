@@ -42,7 +42,7 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
   <div class="toolbar">
     <div class="search-wrap">
       <span class="search-icon">⌕</span>
-      <input type="text" class="filter-id" id="fId" placeholder="Filter by ID…" autocomplete="off" spellcheck="false">
+      <input type="text" class="filter-id" id="fId" placeholder="Filter by ID… (e.g. 1A3, 2B5@0)" autocomplete="off" spellcheck="false">
     </div>
     <select id="fDir">
       <option value="">All Dir</option>

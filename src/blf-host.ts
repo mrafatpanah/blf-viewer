@@ -15,8 +15,24 @@ export function applyFilter(messages: CANMessage[], f: FilterState): CANMessage[
   // Fast path: nothing active
   if (!idLower && !dir && !msgType && !channel) return messages;
 
-  // Pre-split the IDs into an array to avoid splitting inside the loop
-  const idLowerArr = idLower ? idLower.split(',').map(id => id.trim()).filter(id => id !== '') : [];
+  // Pre-parse ID segments, supporting optional @channel suffix per segment.
+  // Malformed segments (empty id, non-integer channel, or missing either part) are dropped.
+  type Seg = { idPart: string; chNum: number | null };
+  const parsedSegs: Seg[] = idLower
+    ? idLower
+        .split(',')
+        .map(seg => seg.trim())
+        .filter(seg => seg !== '')
+        .map((seg): Seg | null => {
+          const at = seg.indexOf('@');
+          if (at === -1) return { idPart: seg, chNum: null };
+          const idPart = seg.slice(0, at).trim();
+          const chPart = seg.slice(at + 1).trim();
+          if (!idPart || !/^\d+$/.test(chPart)) return null; // malformed → drop
+          return { idPart, chNum: parseInt(chPart, 10) };
+        })
+        .filter((s): s is Seg => s !== null)
+    : [];
 
   return messages.filter(m => {
     // Direction filter
@@ -28,27 +44,33 @@ export function applyFilter(messages: CANMessage[], f: FilterState): CANMessage[
       if (t !== msgType) return false;
     }
 
-    // Channel filter — stored as 0-based integer string
-    if (channel !== '' && String(m.channel) !== channel) return false;
-
-    // ID filter — matches if the message ID satisfies ANY of the user-provided ID strings
-    if (idLowerArr.length > 0) {
+    // ID + channel filter
+    if (parsedSegs.length > 0) {
       const raw    = m.arbitrationId.toString(16).toLowerCase();
       const padStd = raw.padStart(3, '0');
       const padExt = raw.padStart(8, '0');
 
-      // Check if current message matches any of the IDs in the search array
-      const matchesAnyId = idLowerArr.some(id => {
+      const matchesAny = parsedSegs.some(({ idPart, chNum }) => {
+        // @-qualified segment: use its own channel, bypass global dropdown
+        // Plain segment: respect global channel dropdown
+        const chOk = chNum !== null
+          ? m.channel === chNum
+          : (channel === '' || String(m.channel) === channel);
+        if (!chOk) return false;
+
         return (
-          raw.includes(id)    ||
-          padStd.includes(id) ||
-          padExt.includes(id) ||
-          ('0x' + raw).includes(id) ||
-          ('0x' + padExt).includes(id)
+          raw.includes(idPart)    ||
+          padStd.includes(idPart) ||
+          padExt.includes(idPart) ||
+          ('0x' + raw).includes(idPart) ||
+          ('0x' + padExt).includes(idPart)
         );
       });
 
-      if (!matchesAnyId) return false;
+      if (!matchesAny) return false;
+    } else {
+      // No ID filter: global channel filter only
+      if (channel !== '' && String(m.channel) !== channel) return false;
     }
 
     return true;
