@@ -13,7 +13,7 @@ export function applyFilter(messages: CANMessage[], f: FilterState): CANMessage[
   const { dir, msgType, channel } = f;
 
   // Fast path: nothing active
-  if (!idLower && !dir && !msgType && !channel) return messages;
+  if (!idLower && !dir && !msgType && !channel) { return messages; }
 
   // Pre-parse ID segments, supporting optional @channel suffix per segment.
   // Malformed segments (empty id, non-integer channel, or missing either part) are dropped.
@@ -25,10 +25,10 @@ export function applyFilter(messages: CANMessage[], f: FilterState): CANMessage[
         .filter(seg => seg !== '')
         .map((seg): Seg | null => {
           const at = seg.indexOf('@');
-          if (at === -1) return { idPart: seg, chNum: null };
+          if (at === -1) { return { idPart: seg, chNum: null }; }
           const idPart = seg.slice(0, at).trim();
           const chPart = seg.slice(at + 1).trim();
-          if (!idPart || !/^\d+$/.test(chPart)) return null; // malformed → drop
+          if (!idPart || !/^\d+$/.test(chPart)) { return null; } // malformed → drop
           return { idPart, chNum: parseInt(chPart, 10) };
         })
         .filter((s): s is Seg => s !== null)
@@ -36,12 +36,12 @@ export function applyFilter(messages: CANMessage[], f: FilterState): CANMessage[
 
   return messages.filter(m => {
     // Direction filter
-    if (dir && (m.isRx ? 'RX' : 'TX') !== dir) return false;
+    if (dir && (m.isRx ? 'RX' : 'TX') !== dir) { return false; }
 
     // Type filter
     if (msgType) {
       const t = m.isErrorFrame ? 'ERR' : m.isFd ? 'FD' : 'STD';
-      if (t !== msgType) return false;
+      if (t !== msgType) { return false; }
     }
 
     // ID + channel filter
@@ -56,7 +56,7 @@ export function applyFilter(messages: CANMessage[], f: FilterState): CANMessage[
         const chOk = chNum !== null
           ? m.channel === chNum
           : (channel === '' || String(m.channel) === channel);
-        if (!chOk) return false;
+        if (!chOk) { return false; }
 
         return (
           raw.includes(idPart)    ||
@@ -67,10 +67,10 @@ export function applyFilter(messages: CANMessage[], f: FilterState): CANMessage[
         );
       });
 
-      if (!matchesAny) return false;
+      if (!matchesAny) { return false; }
     } else {
       // No ID filter: global channel filter only
-      if (channel !== '' && String(m.channel) !== channel) return false;
+      if (channel !== '' && String(m.channel) !== channel) { return false; }
     }
 
     return true;
@@ -126,10 +126,10 @@ export function applySort(messages: CANMessage[], s: SortState): CANMessage[] {
 
 export function toWire(m: CANMessage, idx: number, dbc?: DbcDatabase | null): WireMessage {
   const flagsList: string[] = [];
-  if (m.isExtendedId)        flagsList.push('EXT');
-  if (m.isRemoteFrame)       flagsList.push('RTR');
-  if (m.bitrateSwitch)       flagsList.push('BRS');
-  if (m.errorStateIndicator) flagsList.push('ESI');
+  if (m.isExtendedId) { flagsList.push('EXT'); }
+  if (m.isRemoteFrame) { flagsList.push('RTR'); }
+  if (m.bitrateSwitch) { flagsList.push('BRS'); }
+  if (m.errorStateIndicator) { flagsList.push('ESI'); }
 
   let msgName: string | undefined;
   let signals: WireSignal[] | undefined;

@@ -25,7 +25,7 @@ export function activate(context: vscode.ExtensionContext) {
           filters: { 'BLF Files': ['blf'] },
           openLabel: 'Open BLF File',
         });
-        if (!picked || picked.length === 0) return;
+        if (!picked || picked.length === 0) { return; }
         uri = picked[0];
       }
       await vscode.commands.executeCommand(

@@ -44,6 +44,8 @@ Narrow down messages by:
 - **Type** — Standard CAN, CAN FD, or Error frames
 - **Channel** — individual channel or all
 
+The ID filter field is wider by default and has a right-edge resize handle. Drag it horizontally when working with long comma-separated or `id@channel` filter expressions; the chosen width is remembered for the webview.
+
 ### Sortable columns
 
 Click any column header to sort ascending; click again to reverse. Sorting is applied on the full filtered dataset on the extension host before paging, so the order is always correct across all pages.
@@ -128,7 +130,7 @@ This extension does not contribute any configurable settings.
 
 ### 1.1.0
 
-`id@channel` filter syntax to restrict individual ID segments to a specific channel. Test infrastructure with 11 unit tests for `applyFilter`.
+`id@channel` filter syntax to restrict individual ID segments to a specific channel, a wider resizable ID filter field, test infrastructure with 11 unit tests for `applyFilter`, and lint cleanup for brace-style control-flow warnings.
 
 ### 1.0.0
 

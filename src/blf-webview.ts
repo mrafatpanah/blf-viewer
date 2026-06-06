@@ -40,9 +40,10 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
 
   <!-- Filter toolbar -->
   <div class="toolbar">
-    <div class="search-wrap">
+    <div class="search-wrap" id="filterIdWrap">
       <span class="search-icon">⌕</span>
       <input type="text" class="filter-id" id="fId" placeholder="Filter by ID… (e.g. 1A3, 2B5@0)" autocomplete="off" spellcheck="false">
+      <div class="filter-resize" id="filterResize" title="Resize ID filter"></div>
     </div>
     <select id="fDir">
       <option value="">All Dir</option>
@@ -194,16 +195,23 @@ const CSS = `
   /* Toolbar */
   .toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 16px;
     background: var(--bg2); border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
-  .search-wrap { position: relative; display: flex; align-items: center; }
+  .search-wrap { position: relative; display: flex; align-items: center;
+    width: clamp(380px, 42vw, 760px); min-width: 260px; max-width: min(80vw, 960px);
+    overflow: visible; }
   .search-icon { position: absolute; left: 8px; color: var(--fg2); font-size: 12px;
     pointer-events: none; user-select: none; }
   input[type="text"], select {
     background: var(--vscode-input-background); color: var(--fg);
     border: 1px solid var(--vscode-input-border, var(--border));
-    border-radius: 4px; height: 26px; font-family: var(--mono); font-size: 12px; outline: none;
+    border-radius: 4px; height: 30px; font-family: var(--mono); font-size: 12.5px; outline: none;
   }
   input[type="text"]:focus, select:focus { border-color: var(--accent); }
-  .filter-id { padding: 0 8px 0 26px; width: 160px; }
+  .filter-id { padding: 0 28px 0 26px; width: 100%; min-width: 0; box-sizing: border-box; }
+  .filter-resize { position: absolute; right: 0; top: 5px; bottom: 5px; width: 10px;
+    cursor: col-resize; border-right: 2px solid transparent; z-index: 1;
+    transition: border-color .12s, background .12s; }
+  .search-wrap:hover .filter-resize, .filter-resize.active { border-right-color: var(--accent); }
+  .filter-resize:hover, .filter-resize.active { background: rgba(14,99,156,.12); }
   select { padding: 0 8px; cursor: pointer; }
   .toolbar-space { flex: 1; }
   .result-count { font-size: 11px; color: var(--fg2); font-family: var(--mono); white-space: nowrap; }
@@ -1244,6 +1252,14 @@ const fId   = document.getElementById('fId');
 const fDir  = document.getElementById('fDir');
 const fType = document.getElementById('fType');
 const fCh   = document.getElementById('fCh');
+const filterIdWrap = document.getElementById('filterIdWrap');
+const filterResize = document.getElementById('filterResize');
+
+const savedFilterIdWidth = Number(localStorage.getItem('blf.filterIdWidth') || 0);
+if (filterIdWrap && savedFilterIdWidth > 0) {
+  const maxWidth = Math.max(260, Math.min(window.innerWidth * 0.8, 960));
+  filterIdWrap.style.width = Math.max(260, Math.min(maxWidth, savedFilterIdWidth)) + 'px';
+}
 
 function onFilterChange() {
   filter.id      = (fId?.value   ?? '').trim().toLowerCase();
@@ -1257,6 +1273,45 @@ fId?.addEventListener('input',   onFilterChange);
 fDir?.addEventListener('change', onFilterChange);
 fType?.addEventListener('change',onFilterChange);
 fCh?.addEventListener('change',  onFilterChange);
+
+let filterResizePointerId = null;
+let filterResizeStartX = 0;
+let filterResizeStartW = 0;
+
+function filterWidthBounds() {
+  return {
+    min: 260,
+    max: Math.max(260, Math.min(window.innerWidth * 0.8, 960)),
+  };
+}
+
+filterResize?.addEventListener('pointerdown', e => {
+  if (!filterIdWrap) return;
+  e.preventDefault();
+  filterResizePointerId = e.pointerId;
+  filterResizeStartX = e.clientX;
+  filterResizeStartW = filterIdWrap.getBoundingClientRect().width;
+  filterResize.classList.add('active');
+  filterResize.setPointerCapture(e.pointerId);
+});
+
+filterResize?.addEventListener('pointermove', e => {
+  if (!filterIdWrap || filterResizePointerId !== e.pointerId) return;
+  const bounds = filterWidthBounds();
+  const next = Math.max(bounds.min, Math.min(bounds.max, filterResizeStartW + e.clientX - filterResizeStartX));
+  filterIdWrap.style.width = next + 'px';
+});
+
+function endFilterResize(e) {
+  if (!filterIdWrap || filterResizePointerId !== e.pointerId) return;
+  filterResizePointerId = null;
+  filterResize?.classList.remove('active');
+  localStorage.setItem('blf.filterIdWidth', String(Math.round(filterIdWrap.getBoundingClientRect().width)));
+  filterResize?.releasePointerCapture(e.pointerId);
+}
+
+filterResize?.addEventListener('pointerup', endFilterResize);
+filterResize?.addEventListener('pointercancel', endFilterResize);
 
 document.getElementById('btnClear').addEventListener('click', () => {
   if (fId)   fId.value   = '';
