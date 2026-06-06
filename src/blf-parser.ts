@@ -174,13 +174,13 @@ export class BLFReader {
 
       while (offset < fileBuffer.length) {
         const remaining = fileBuffer.length - offset;
-        if (remaining < OBJ_HEADER_BASE_SIZE) break;
+        if (remaining < OBJ_HEADER_BASE_SIZE) { break; }
 
         const container = this.parseObjectHeader(fileBuffer, offset);
         if (!container) {
           // Try to advance and find next LOBJ
           const nextLobj = fileBuffer.indexOf(Buffer.from('LOBJ'), offset + 1);
-          if (nextLobj === -1) break;
+          if (nextLobj === -1) { break; }
           offset = nextLobj;
           continue;
         }
@@ -215,7 +215,7 @@ export class BLFReader {
   }
 
   private parseFileHeader(buffer: Buffer): FileHeader | null {
-    if (buffer.length < FILE_HEADER_SIZE) return null;
+    if (buffer.length < FILE_HEADER_SIZE) { return null; }
 
     const reader = new BinaryReader(buffer);
     const signature = reader.readBytes(4).toString('ascii');
@@ -282,17 +282,17 @@ export class BLFReader {
   }
 
   private parseObjectHeader(buffer: Buffer, offset: number = 0): ObjHeaderBase | null {
-    if (buffer.length - offset < OBJ_HEADER_BASE_SIZE) return null;
+    if (buffer.length - offset < OBJ_HEADER_BASE_SIZE) { return null; }
 
     const sig = buffer.slice(offset, offset + 4).toString('ascii');
-    if (sig !== 'LOBJ') return null;
+    if (sig !== 'LOBJ') { return null; }
 
     const headerSize = buffer.readUInt16LE(offset + 4);
     const headerVersion = buffer.readUInt16LE(offset + 6);
     const objectSize = buffer.readUInt32LE(offset + 8);
     const objectType = buffer.readUInt32LE(offset + 12);
 
-    if (objectSize < OBJ_HEADER_BASE_SIZE) return null;
+    if (objectSize < OBJ_HEADER_BASE_SIZE) { return null; }
 
     return { signature: sig, headerSize, headerVersion, objectSize, objectType };
   }
@@ -306,12 +306,12 @@ export class BLFReader {
   private parseObjectTimestamp(buffer: Buffer, offset: number = 0): number {
     // After 16-byte base header
     const flagsOffset = offset + OBJ_HEADER_BASE_SIZE;
-    if (buffer.length < flagsOffset + 12) return 0;
+    if (buffer.length < flagsOffset + 12) { return 0; }
 
     const flags = buffer.readUInt32LE(flagsOffset);
     // timestamp is at flagsOffset + 8 (skip flags(4) + clientIndex(2) + objectVersion(2))
     const tsOffset = flagsOffset + 8;
-    if (buffer.length < tsOffset + 8) return 0;
+    if (buffer.length < tsOffset + 8) { return 0; }
 
     const tsRaw = Number(buffer.readBigUInt64LE(tsOffset));
 
@@ -361,8 +361,8 @@ export class BLFReader {
         if (err) {
           // Try inflateRaw as fallback
           zlib.inflateRaw(data, (err2, result2) => {
-            if (err2) reject(err);
-            else resolve(result2 as Buffer<ArrayBufferLike>);
+            if (err2) { reject(err); }
+            else { resolve(result2 as Buffer<ArrayBufferLike>); }
           });
         } else {
           resolve(result as Buffer<ArrayBufferLike>);
@@ -378,10 +378,10 @@ export class BLFReader {
     while (offset <= data.length - OBJ_HEADER_BASE_SIZE) {
       // Find next LOBJ signature
       const nextObj = data.indexOf(Buffer.from('LOBJ'), offset);
-      if (nextObj === -1) break;
+      if (nextObj === -1) { break; }
 
       offset = nextObj;
-      if (data.length - offset < OBJ_HEADER_BASE_SIZE) break;
+      if (data.length - offset < OBJ_HEADER_BASE_SIZE) { break; }
 
       const objHeader = this.parseObjectHeader(data, offset);
       if (!objHeader || objHeader.objectSize < OBJ_HEADER_BASE_SIZE) {
@@ -398,16 +398,16 @@ export class BLFReader {
 
         if (objHeader.objectType === CAN_MESSAGE || objHeader.objectType === CAN_MESSAGE2) {
           const msg = this.parseCANMessage(objBuf, objHeader, relTs, absTs);
-          if (msg) messages.push(msg);
+          if (msg) { messages.push(msg); }
         } else if (objHeader.objectType === CAN_ERROR_EXT) {
           const msg = this.parseCANErrorFrame(objBuf, objHeader, relTs, absTs);
-          if (msg) messages.push(msg);
+          if (msg) { messages.push(msg); }
         } else if (objHeader.objectType === CAN_FD_MESSAGE) {
           const msg = this.parseCANFDMessage(objBuf, objHeader, relTs, absTs);
-          if (msg) messages.push(msg);
+          if (msg) { messages.push(msg); }
         } else if (objHeader.objectType === CAN_FD_MESSAGE_64) {
           const msg = this.parseCANFDMessage64(objBuf, objHeader, relTs, absTs);
-          if (msg) messages.push(msg);
+          if (msg) { messages.push(msg); }
         }
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
@@ -418,7 +418,7 @@ export class BLFReader {
       const pad = (4 - (nextOffset % 4)) % 4;
       nextOffset += pad;
 
-      if (nextOffset <= offset) nextOffset = offset + 4;
+      if (nextOffset <= offset) { nextOffset = offset + 4; }
       offset = nextOffset;
     }
 
@@ -434,7 +434,7 @@ export class BLFReader {
   ): CANMessage | null {
     try {
       let pos = header.headerSize;
-      if (buffer.length < pos + 8) return null;
+      if (buffer.length < pos + 8) { return null; }
 
       const channel = buffer.readUInt16LE(pos); pos += 2;
       const msgFlags = buffer.readUInt8(pos); pos += 1;
@@ -469,7 +469,7 @@ export class BLFReader {
   ): CANMessage | null {
     try {
       let pos = header.headerSize;
-      if (buffer.length < pos + 8) return null;
+      if (buffer.length < pos + 8) { return null; }
 
       const channel = buffer.readUInt16LE(pos); pos += 2;
       pos += 2; // length
@@ -510,7 +510,7 @@ export class BLFReader {
   ): CANMessage | null {
     try {
       let pos = header.headerSize;
-      if (buffer.length < pos + 16) return null;
+      if (buffer.length < pos + 16) { return null; }
 
       const channel = buffer.readUInt16LE(pos); pos += 2;
       const msgFlags = buffer.readUInt8(pos); pos += 1;
@@ -553,7 +553,7 @@ export class BLFReader {
   ): CANMessage | null {
     try {
       let pos = header.headerSize;
-      if (buffer.length < pos + 32) return null;
+      if (buffer.length < pos + 32) { return null; }
 
       const channel = buffer.readUInt8(pos); pos += 1;
       const dlc = buffer.readUInt8(pos); pos += 1;

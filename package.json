@@ -2,12 +2,21 @@
   "name": "blf-viewer",
   "displayName": "BLF Viewer",
   "description": "View Binary Logging Format (BLF) CAN bus files",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "engines": {
     "vscode": "^1.109.0"
   },
-  "categories": ["Other"],
-  "keywords": ["BLF", "CAN bus", "automotive", "binary logging", "Vector"],
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "BLF",
+    "CAN bus",
+    "automotive",
+    "binary logging",
+    "Vector",
+    "dbc"
+  ],
   "icon": "images/icon.png",
   "publisher": "mafatpanah",
   "repository": {
@@ -22,7 +31,11 @@
       {
         "viewType": "blf.viewer",
         "displayName": "BLF Viewer",
-        "selector": [{ "filenamePattern": "*.blf" }],
+        "selector": [
+          {
+            "filenamePattern": "*.blf"
+          }
+        ],
         "priority": "default"
       }
     ],
@@ -41,6 +54,7 @@
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "pretest": "tsc --project tsconfig.json",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
     "test": "vscode-test"

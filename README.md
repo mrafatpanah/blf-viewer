@@ -39,10 +39,12 @@ Click the **⊕ DBC** button in the toolbar to import a `.dbc` file. Once loaded
 
 Narrow down messages by:
 
-- **Arbitration ID** — hex substring match, or comma-separated list (e.g. `7E0,7E8`) to match multiple IDs at once
+- **Arbitration ID** — hex substring match, comma-separated list (e.g. `7E0,7E8`), or `id@channel` syntax to pin a segment to a specific channel (e.g. `100@0` matches ID `100` on channel 0 only; `100@0,100@1` matches the same ID on both channels). Segments without `@` respect the global channel dropdown.
 - **Direction** — RX, TX, or both
 - **Type** — Standard CAN, CAN FD, or Error frames
 - **Channel** — individual channel or all
+
+The ID filter field is wider by default and has a right-edge resize handle. Drag it horizontally when working with long comma-separated or `id@channel` filter expressions; the chosen width is remembered for the webview.
 
 ### Sortable columns
 
@@ -125,6 +127,10 @@ This extension does not contribute any configurable settings.
 ---
 
 ## Release Notes
+
+### 1.1.0
+
+`id@channel` filter syntax to restrict individual ID segments to a specific channel, a wider resizable ID filter field, test infrastructure with 11 unit tests for `applyFilter`, and lint cleanup for brace-style control-flow warnings.
 
 ### 1.0.0
 

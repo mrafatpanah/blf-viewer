@@ -40,7 +40,7 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
 
     // Parse in the background; the extension host is the single owner of data
     let messages = await this.parseFile(document.uri.fsPath, webviewPanel);
-    if (!messages) return; // parse error already posted to webview
+    if (!messages) { return; } // parse error already posted to webview
 
     // Per-panel DBC database (in-memory, per-session)
     let dbcDb: DbcDatabase | null = null;
@@ -68,7 +68,7 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
           filters: { 'DBC Files': ['dbc'] },
           openLabel: 'Import DBC',
         });
-        if (!picked?.length) return;
+        if (!picked?.length) { return; }
         try {
           const MAX_DBC_BYTES = 10 * 1024 * 1024; // 10 MB
           const stat = fs.statSync(picked[0].fsPath);

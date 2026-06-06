@@ -2,6 +2,19 @@
 
 All notable changes to the **BLF Viewer** extension are documented here.
 
+## [1.1.0] — 2026-06-06
+
+### Added
+
+- **`id@channel` filter syntax** — append `@<channel>` to any ID segment to restrict that segment to a specific channel (e.g. `100@0` matches ID `100` on channel 0 only; `100@0,100@1` matches the same ID on both channels independently). Segments without `@` continue to respect the global channel dropdown. Malformed `@` suffixes (non-integer or missing ID part) are silently dropped. Placeholder text in the filter input updated to show an example.
+- **Resizable ID filter field** — the toolbar ID filter is wider by default, has a visible right-edge drag handle, and remembers the chosen width in the webview for long comma-separated or `id@channel` expressions.
+- **Unit tests for `applyFilter`** — Mocha suite covering no-filter passthrough, plain ID match, channel-qualified match, multi-segment channel combinations, global channel interaction, and malformed-segment handling (11 tests).
+- **Test infrastructure** — added `"outDir": "out"` to `tsconfig.json` and a `pretest` script so `vscode-test` finds compiled test files in `out/test/`.
+
+### Fixed
+
+- **Brace-style lint warnings** — single-line control-flow bodies in parser, host, provider, extension entry point, and webview logic now use explicit braces to satisfy the configured lint rules.
+
 ## [1.0.0] — 2026-05-15
 
 ### Added
