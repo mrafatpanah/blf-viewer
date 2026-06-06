@@ -12,3 +12,7 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
+docs/**
+.claude/**
+CLAUDE.md
+.markdownlint.json
