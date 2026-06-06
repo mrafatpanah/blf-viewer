@@ -1,0 +1,21 @@
+VERSION ""
+
+NS_ :
+
+BS_:
+
+BU_:
+
+BO_ 256 EngineStatus: 8 Vector__XXX
+ SG_ EngineSpeed : 0|16@1+ (0.1,0) [0|6553.5] "rpm" Vector__XXX
+ SG_ EngineTemp : 16|8@1+ (1,-40) [-40|215] "degC" Vector__XXX
+
+BO_ 512 BrakeControl: 8 Vector__XXX
+ SG_ BrakePressure : 0|8@1+ (0.5,0) [0|127.5] "bar" Vector__XXX
+
+BO_ 768 GearStatus: 8 Vector__XXX
+ SG_ GearPosition : 0|4@1+ (1,0) [0|15] "" Vector__XXX
+
+BO_ 1024 SteeringData: 8 Vector__XXX
+ SG_ SteeringAngle : 0|16@1- (0.1,0) [-3276.8|3276.7] "deg" Vector__XXX
+

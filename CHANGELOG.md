@@ -2,6 +2,14 @@
 
 All notable changes to the **BLF Viewer** extension are documented here.
 
+## [1.1.0] — 2026-06-06
+
+### Added
+
+- **`id@channel` filter syntax** — append `@<channel>` to any ID segment to restrict that segment to a specific channel (e.g. `100@0` matches ID `100` on channel 0 only; `100@0,100@1` matches the same ID on both channels independently). Segments without `@` continue to respect the global channel dropdown. Malformed `@` suffixes (non-integer or missing ID part) are silently dropped. Placeholder text in the filter input updated to show an example.
+- **Unit tests for `applyFilter`** — Mocha suite covering no-filter passthrough, plain ID match, channel-qualified match, multi-segment channel combinations, global channel interaction, and malformed-segment handling (11 tests).
+- **Test infrastructure** — added `"outDir": "out"` to `tsconfig.json` and a `pretest` script so `vscode-test` finds compiled test files in `out/test/`.
+
 ## [1.0.0] — 2026-05-15
 
 ### Added
