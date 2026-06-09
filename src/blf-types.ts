@@ -17,7 +17,7 @@ export interface SortState {
 // Messages sent from webview → host
 export type WebviewMessage =
   | { type: 'requestPage'; startIndex: number; count: number; filter: FilterState; sort: SortState; }
-  | { type: 'searchFirst'; filter: FilterState; sort: SortState; search: FilterState; }
+  | { type: 'searchFirst'; filter: FilterState; sort: SortState; search: FilterState; fromIndex?: number; direction?: 'forward' | 'backward'; }
   | { type: 'openDbcFile' }
   | { type: 'clearDbc' };
 
@@ -80,6 +80,7 @@ export type HostMessage =
       index:   number;
       row?:    WireMessage;
       message?: string;
+      total?:  number;
     }
   | {
       type:    'error';

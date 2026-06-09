@@ -75,9 +75,10 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
   <!-- Search toolbar -->
   <div class="toolbar search-toolbar">
     <span class="panel-label">Search</span>
-    <div class="search-wrap">
+    <div class="search-wrap" id="searchIdWrap">
       <span class="search-icon">⌕</span>
       <input type="text" class="filter-id" id="sId" placeholder="Search ID…" autocomplete="off" spellcheck="false">
+      <div class="filter-resize" id="searchResize" title="Resize search ID field"></div>
     </div>
     <div class="search-wrap data-search-wrap">
       <span class="search-icon">⌕</span>
@@ -95,8 +96,10 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
       <option value="ERR">Error</option>
     </select>
     <select id="sCh"><option value="">Any Ch</option></select>
-    <button class="btn data-search-btn" id="btnSearch" title="Locate first matching row">Find</button>
-    <button class="btn" id="btnClearSearch">✕ Clear</button>
+    <button class="btn data-search-btn" id="btnSearchPrev" title="Previous match">◀</button>
+    <button class="btn data-search-btn" id="btnSearchNext" title="Next match">▶</button>
+    <span class="search-match-count" id="searchMatchCount"></span>
+    <button class="btn" id="btnClearSearch">✕</button>
   </div>
 
   <!-- Active grouping banner -->
@@ -249,9 +252,12 @@ const CSS = `
     transition: border-color .12s, background .12s; }
   .search-wrap:hover .filter-resize, .filter-resize.active { border-right-color: var(--accent); }
   .filter-resize:hover, .filter-resize.active { background: rgba(14,99,156,.12); }
-  .data-search-wrap { gap: 4px; }
+  .data-search-wrap { gap: 4px; width: auto !important; min-width: 0; flex-shrink: 0; }
   .filter-data { padding: 0 8px 0 26px; width: 150px; }
   .data-search-btn { height: 26px; padding: 0 8px; font-size: 11px; }
+  #searchIdWrap { width: clamp(160px, 18vw, 320px); }
+  .search-match-count { font-family: var(--mono); font-size: 11px; color: var(--fg2);
+    white-space: nowrap; min-width: 42px; text-align: center; }
   select { padding: 0 8px; cursor: pointer; }
   .toolbar-space { flex: 1; }
   .result-count { font-size: 11px; color: var(--fg2); font-family: var(--mono); white-space: nowrap; }
@@ -322,6 +328,7 @@ const CSS = `
   .row.sel-multi { background: var(--sel-multi); }
   .row.r-err     { background: rgba(241,76,76,.06); }
   .row.r-fd      { background: rgba(156,198,255,.04); }
+  .row-search-hit { box-shadow: inset 3px 0 0 var(--yellow); }
 
   /* Custom row colors (from colorize menu) */
   .row[data-color="red"]    { background: rgba(241,76,76,.15)    !important; }
@@ -517,6 +524,13 @@ let dbcFileName = '';
 
 // Grouping field key or null
 let groupBy = null;
+
+// Search hit state
+let searchHitRowI    = -1;  // 'i' index of highlighted search hit (cleared on filter change)
+let searchMatchPos   = 0;   // 1-based hit counter shown in UI
+let searchTotal      = 0;   // total match count from host
+let lastSearchKey    = '';  // JSON criteria fingerprint; '' = invalidated
+let pendingSearchDir = 'forward';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DOM REFS
@@ -820,6 +834,9 @@ function resetAndRefetch() {
   selectedRowI = -1;
   selectedSet.clear();
   updateSelCount();
+  searchHitRowI = -1;
+  lastSearchKey = '';
+  updateSearchMatchCount();
   scroller.scrollTop = 0;
 
   // Optimistically clear the row count now — the real value arrives with page 0.
@@ -852,6 +869,7 @@ function renderRow(div, m) {
   else if (isMultiSel)    cls += ' sel-multi';
   else if (m.err)         cls += ' r-err';
   else if (m.type==='FD') cls += ' r-fd';
+  if (m.i === searchHitRowI) { cls += ' row-search-hit'; }
 
   div.className  = cls;
   div.dataset.mi = m.i;
@@ -1364,6 +1382,63 @@ function endFilterResize(e) {
 filterResize?.addEventListener('pointerup', endFilterResize);
 filterResize?.addEventListener('pointercancel', endFilterResize);
 
+// ── Search ID resize ──────────────────────────────────────────────────────────
+
+const searchIdWrap  = document.getElementById('searchIdWrap');
+const searchResize  = document.getElementById('searchResize');
+
+const savedSearchIdWidth = Number(localStorage.getItem('blf.searchIdWidth') || 0);
+if (searchIdWrap && savedSearchIdWidth > 0) {
+  const maxW = Math.max(160, Math.min(window.innerWidth * 0.8, 960));
+  searchIdWrap.style.width = Math.max(160, Math.min(maxW, savedSearchIdWidth)) + 'px';
+}
+
+let searchResizePointerId = null;
+let searchResizeStartX = 0;
+let searchResizeStartW = 0;
+
+function searchIdWidthBounds() {
+  return { min: 160, max: Math.max(160, Math.min(window.innerWidth * 0.8, 960)) };
+}
+
+searchResize?.addEventListener('pointerdown', e => {
+  if (!searchIdWrap) { return; }
+  e.preventDefault();
+  searchResizePointerId = e.pointerId;
+  searchResizeStartX = e.clientX;
+  searchResizeStartW = searchIdWrap.getBoundingClientRect().width;
+  searchResize.classList.add('active');
+  searchResize.setPointerCapture(e.pointerId);
+});
+
+searchResize?.addEventListener('pointermove', e => {
+  if (!searchIdWrap || searchResizePointerId !== e.pointerId) { return; }
+  const bounds = searchIdWidthBounds();
+  const next = Math.max(bounds.min, Math.min(bounds.max, searchResizeStartW + e.clientX - searchResizeStartX));
+  searchIdWrap.style.width = next + 'px';
+});
+
+function endSearchResize(e) {
+  if (!searchIdWrap || searchResizePointerId !== e.pointerId) { return; }
+  searchResizePointerId = null;
+  searchResize?.classList.remove('active');
+  localStorage.setItem('blf.searchIdWidth', String(Math.round(searchIdWrap.getBoundingClientRect().width)));
+  searchResize?.releasePointerCapture(e.pointerId);
+}
+
+searchResize?.addEventListener('pointerup', endSearchResize);
+searchResize?.addEventListener('pointercancel', endSearchResize);
+
+// ── Search match counter ──────────────────────────────────────────────────────
+
+function updateSearchMatchCount() {
+  const el = document.getElementById('searchMatchCount');
+  if (!el) { return; }
+  el.textContent = (searchMatchPos > 0 && searchTotal > 0)
+    ? searchMatchPos + ' / ' + searchTotal
+    : '';
+}
+
 function getSearchState() {
   return {
     id:      (sId?.value   ?? '').trim().toLowerCase(),
@@ -1378,25 +1453,59 @@ function hasSearchCriteria(search) {
   return Boolean(search.id || search.data || search.dir || search.msgType || search.channel);
 }
 
-function runSearch() {
+function runSearchNext() {
   const search = getSearchState();
-  if (!hasSearchCriteria(search)) {
-    showToast('Enter search criteria');
-    return;
+  if (!hasSearchCriteria(search)) { showToast('Enter search criteria'); return; }
+
+  const key = JSON.stringify(search);
+  const isNew = key !== lastSearchKey;
+  if (isNew) {
+    lastSearchKey  = key;
+    searchMatchPos = 0;
+    searchTotal    = 0;
+    searchHitRowI  = -1;
   }
+  pendingSearchDir = 'forward';
 
   vscode.postMessage({
     type: 'searchFirst',
     filter: { ...filter },
     sort: { ...sort },
     search,
+    fromIndex:  isNew ? 0 : searchHitRowI + 1,
+    direction:  'forward',
   });
 }
 
-document.getElementById('btnSearch')?.addEventListener('click', runSearch);
+function runSearchPrev() {
+  const search = getSearchState();
+  if (!hasSearchCriteria(search)) { showToast('Enter search criteria'); return; }
+
+  const key = JSON.stringify(search);
+  const isNew = key !== lastSearchKey;
+  if (isNew) {
+    lastSearchKey  = key;
+    searchMatchPos = 0;
+    searchTotal    = 0;
+    searchHitRowI  = -1;
+  }
+  pendingSearchDir = 'backward';
+
+  vscode.postMessage({
+    type: 'searchFirst',
+    filter: { ...filter },
+    sort: { ...sort },
+    search,
+    fromIndex:  isNew ? 0 : searchHitRowI,
+    direction:  isNew ? 'forward' : 'backward',
+  });
+}
+
+document.getElementById('btnSearchNext')?.addEventListener('click', runSearchNext);
+document.getElementById('btnSearchPrev')?.addEventListener('click', runSearchPrev);
 [sId, sData, sDir, sType, sCh].forEach(el => {
   el?.addEventListener('keydown', ev => {
-    if (ev.key === 'Enter') { runSearch(); }
+    if (ev.key === 'Enter') { runSearchNext(); }
   });
 });
 
@@ -1406,6 +1515,12 @@ document.getElementById('btnClearSearch')?.addEventListener('click', () => {
   if (sDir)  { sDir.value  = ''; }
   if (sType) { sType.value = ''; }
   if (sCh)   { sCh.value   = ''; }
+  searchHitRowI  = -1;
+  searchMatchPos = 0;
+  searchTotal    = 0;
+  lastSearchKey  = '';
+  updateSearchMatchCount();
+  renderViewport();
 });
 
 document.getElementById('btnClear').addEventListener('click', () => {
@@ -1527,16 +1642,28 @@ window.addEventListener('message', ({ data: msg }) => {
       return;
     }
 
+    if (msg.total !== undefined && msg.total > 0) { searchTotal = msg.total; }
+
+    if (searchMatchPos === 0) {
+      searchMatchPos = 1;
+    } else if (pendingSearchDir === 'forward') {
+      searchMatchPos = searchTotal > 0 ? (searchMatchPos % searchTotal) + 1 : 1;
+    } else {
+      searchMatchPos = searchMatchPos <= 1 ? (searchTotal || 1) : searchMatchPos - 1;
+    }
+
+    searchHitRowI = msg.index;
+    updateSearchMatchCount();
+
     selectedSet.clear();
     selectedRowI = msg.index;
     lastClickedI = msg.index;
     updateSelCount();
-    if (msg.row) showDetail(msg.row);
+    if (msg.row) { showDetail(msg.row); }
 
     scroller.scrollTop = Math.max(0, msg.index * ROW_H - ROW_H * 3);
     requestPagesForRange(msg.index, msg.index);
     renderViewport();
-    showToast('Found row #' + (msg.index + 1).toLocaleString());
   }
 
   // ── error ─────────────────────────────────────────────────────────────────

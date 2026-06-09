@@ -17,11 +17,30 @@ export function applyFilter(messages: CANMessage[], f: FilterState): CANMessage[
   return messages.filter(m => matchesFilterCriteria(m, criteria));
 }
 
-export function findFirstMatchingIndex(messages: CANMessage[], search: FilterState): number {
+export function findFirstMatchingIndex(messages: CANMessage[], search: FilterState, fromIndex = 0): number {
   const criteria = compileFilterCriteria(search);
   if (!criteria.active) { return -1; }
 
-  return messages.findIndex(m => matchesFilterCriteria(m, criteria));
+  for (let i = fromIndex; i < messages.length; i++) {
+    if (matchesFilterCriteria(messages[i], criteria)) { return i; }
+  }
+  return -1;
+}
+
+export function findLastMatchingIndex(messages: CANMessage[], search: FilterState, beforeIndex: number): number {
+  const criteria = compileFilterCriteria(search);
+  if (!criteria.active) { return -1; }
+
+  for (let i = Math.min(beforeIndex - 1, messages.length - 1); i >= 0; i--) {
+    if (matchesFilterCriteria(messages[i], criteria)) { return i; }
+  }
+  return -1;
+}
+
+export function countMatches(messages: CANMessage[], search: FilterState): number {
+  const criteria = compileFilterCriteria(search);
+  if (!criteria.active) { return 0; }
+  return messages.reduce((n, m) => n + (matchesFilterCriteria(m, criteria) ? 1 : 0), 0);
 }
 
 type Seg = { idPart: string; chNum: number | null };
