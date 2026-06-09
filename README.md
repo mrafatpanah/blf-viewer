@@ -51,7 +51,7 @@ Filter by:
 - **Type** — Standard CAN, CAN FD, or Error frames
 - **Channel** — individual channel or all
 
-The ID filter field is wider by default and has a right-edge resize handle. Drag it horizontally when working with long comma-separated or `id@channel` filter expressions; the chosen width is remembered for the webview.
+Both the ID filter and the Search ID field have a right-edge resize handle. Drag horizontally to widen them; the chosen width is remembered per field across reloads.
 
 Data byte examples:
 
@@ -66,7 +66,7 @@ The data byte filter matches bytes in order and contiguously. For example, `22 F
 
 #### Search panel
 
-Use **Search** when you want to locate the first matching row without changing the visible dataset. Search uses the current filtered and sorted table as its search space, then scrolls to and selects the first matching row.
+Use **Search** when you want to locate matching rows without changing the visible dataset. Search uses the current filtered and sorted table as its search space, then scrolls to and selects the matching row.
 
 Search by:
 
@@ -76,7 +76,9 @@ Search by:
 - **Type**
 - **Channel**
 
-Search data bytes follow the same matching rules as the data byte filter. For example, entering `22 F1 90` in **Search data bytes** and clicking **Find** jumps to the first currently visible-table row whose payload contains that sequence. The row count and active filters do not change.
+**Navigation**: click **▶** to jump to the next match, **◀** for the previous. A counter (e.g. `3 / 47`) shows the current position within all matches. Reaching the last match wraps back to the first, and vice versa. The found row is highlighted with an amber left stripe so it stands out even when scrolled away from the selection. Press **✕** to clear all search fields and remove the highlight.
+
+Search data bytes follow the same matching rules as the data byte filter. For example, entering `22 F1 90` in **Search data bytes** and pressing **▶** jumps to the first currently visible-table row whose payload contains that sequence. The row count and active filters do not change.
 
 Use **Filter** when you want a smaller table. Use **Search** when you want navigation inside the current table.
 
@@ -145,7 +147,7 @@ Uses VS Code CSS variables throughout — works correctly with any light or dark
 1. Open a `.blf` file via **File → Open File** or by double-clicking in the Explorer panel
 2. The BLF Viewer opens automatically as a custom editor
 3. Use the **Filter** panel to narrow the table by ID, data bytes, direction, type, or channel
-4. Use the **Search** panel to jump to the first matching row without changing the current table
+4. Use the **Search** panel to navigate matching rows (◀ / ▶) without changing the current table
 5. Click any row to inspect its bytes in the detail panel on the right
 6. Click **⊟ Detail** in the top bar to show or hide the detail panel
 7. Right-click any row for copy, colorize, filter, and grouping options
@@ -156,7 +158,8 @@ Common examples:
 | ---------------------------------------- | ------------------------------------------------------- |
 | Show only tester present frames          | Enter `3E 80` in **Filter → Data bytes**                |
 | Show only DID F190 read requests         | Enter `22 F1 90` in **Filter → Data bytes**             |
-| Jump to the first DID F190 request       | Enter `22 F1 90` in **Search → Data bytes**, click Find |
+| Jump to the first DID F190 request       | Enter `22 F1 90` in **Search → Data bytes**, press ▶   |
+| Navigate all DID F190 requests           | Keep pressing ▶ — counter shows position (e.g. `2 / 9`) |
 | Show multiple response IDs               | Enter `7E8,7E9` in **Filter → ID**                      |
 | Search only inside channel 1 traffic     | Set **Filter → Ch** to `Ch 1`, then use **Search**      |
 
