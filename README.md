@@ -176,7 +176,7 @@ This extension does not contribute any configurable settings.
 
 ## Release Notes
 
-### Unreleased
+### 1.2.0
 
 CAN FD Message 64 payload parsing fix, UTC timestamp column, payload data byte filter, and a Search panel to jump to matching rows without changing the visible table.
 
