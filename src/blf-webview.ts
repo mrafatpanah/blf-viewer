@@ -40,10 +40,15 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
 
   <!-- Filter toolbar -->
   <div class="toolbar">
+    <span class="panel-label">Filter</span>
     <div class="search-wrap" id="filterIdWrap">
       <span class="search-icon">⌕</span>
       <input type="text" class="filter-id" id="fId" placeholder="Filter by ID… (e.g. 1A3, 2B5@0)" autocomplete="off" spellcheck="false">
       <div class="filter-resize" id="filterResize" title="Resize ID filter"></div>
+    </div>
+    <div class="search-wrap data-search-wrap">
+      <span class="search-icon">⌕</span>
+      <input type="text" class="filter-data" id="fData" placeholder="Data bytes…" autocomplete="off" spellcheck="false">
     </div>
     <select id="fDir">
       <option value="">All Dir</option>
@@ -65,6 +70,36 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
     <button class="btn" id="btnImportDbc" title="Import DBC file">⊕ DBC</button>
     <span class="dbc-badge" id="dbcBadge" style="display:none"></span>
     <button class="btn" id="btnClearDbc" style="display:none" title="Remove DBC">✕</button>
+  </div>
+
+  <!-- Search toolbar -->
+  <div class="toolbar search-toolbar">
+    <span class="panel-label">Search</span>
+    <div class="search-wrap" id="searchIdWrap">
+      <span class="search-icon">⌕</span>
+      <input type="text" class="filter-id" id="sId" placeholder="Search ID…" autocomplete="off" spellcheck="false">
+      <div class="filter-resize" id="searchResize" title="Resize search ID field"></div>
+    </div>
+    <div class="search-wrap data-search-wrap">
+      <span class="search-icon">⌕</span>
+      <input type="text" class="filter-data" id="sData" placeholder="Search data bytes…" autocomplete="off" spellcheck="false">
+    </div>
+    <select id="sDir">
+      <option value="">Any Dir</option>
+      <option value="RX">RX</option>
+      <option value="TX">TX</option>
+    </select>
+    <select id="sType">
+      <option value="">Any Type</option>
+      <option value="STD">STD</option>
+      <option value="FD">CAN FD</option>
+      <option value="ERR">Error</option>
+    </select>
+    <select id="sCh"><option value="">Any Ch</option></select>
+    <button class="btn data-search-btn" id="btnSearchPrev" title="Previous match">◀</button>
+    <button class="btn data-search-btn" id="btnSearchNext" title="Next match">▶</button>
+    <span class="search-match-count" id="searchMatchCount"></span>
+    <button class="btn" id="btnClearSearch">✕</button>
   </div>
 
   <!-- Active grouping banner -->
@@ -195,6 +230,11 @@ const CSS = `
   /* Toolbar */
   .toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 16px;
     background: var(--bg2); border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
+  .search-toolbar { background: var(--bg); }
+  .panel-label {
+    width: 48px; flex-shrink: 0; color: var(--fg2); font-size: 10px; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase;
+  }
   .search-wrap { position: relative; display: flex; align-items: center;
     width: clamp(380px, 42vw, 760px); min-width: 260px; max-width: min(80vw, 960px);
     overflow: visible; }
@@ -212,6 +252,12 @@ const CSS = `
     transition: border-color .12s, background .12s; }
   .search-wrap:hover .filter-resize, .filter-resize.active { border-right-color: var(--accent); }
   .filter-resize:hover, .filter-resize.active { background: rgba(14,99,156,.12); }
+  .data-search-wrap { gap: 4px; width: auto !important; min-width: 0; flex-shrink: 0; }
+  .filter-data { padding: 0 8px 0 26px; width: 150px; }
+  .data-search-btn { height: 26px; padding: 0 8px; font-size: 11px; }
+  #searchIdWrap { width: clamp(160px, 18vw, 320px); }
+  .search-match-count { font-family: var(--mono); font-size: 11px; color: var(--fg2);
+    white-space: nowrap; min-width: 42px; text-align: center; }
   select { padding: 0 8px; cursor: pointer; }
   .toolbar-space { flex: 1; }
   .result-count { font-size: 11px; color: var(--fg2); font-family: var(--mono); white-space: nowrap; }
@@ -282,6 +328,7 @@ const CSS = `
   .row.sel-multi { background: var(--sel-multi); }
   .row.r-err     { background: rgba(241,76,76,.06); }
   .row.r-fd      { background: rgba(156,198,255,.04); }
+  .row-search-hit { box-shadow: inset 3px 0 0 var(--yellow); }
 
   /* Custom row colors (from colorize menu) */
   .row[data-color="red"]    { background: rgba(241,76,76,.15)    !important; }
@@ -438,6 +485,7 @@ const PAGE_SZ  = 60;   // rows per postMessage round-trip
 const DEFAULT_COLS = [
   { key:'i',     label:'#',       width:52,  minWidth:36,  sortable:true,  visible:true  },
   { key:'t',     label:'Time(s)', width:108, minWidth:70,  sortable:true,  visible:true  },
+  { key:'utc',   label:'UTC',     width:178, minWidth:140, sortable:true,  visible:true  },
   { key:'id',    label:'Arb ID',  width:100, minWidth:60,  sortable:true,  visible:true  },
   { key:'name',  label:'Name',    width:160, minWidth:80,  sortable:false, visible:false },
   { key:'type',  label:'Type',    width:54,  minWidth:40,  sortable:true,  visible:true  },
@@ -464,7 +512,7 @@ let lastClickedI  = -1;           // anchor for shift-click range
 const pageCache   = new Map();    // Map<pageStart, WireMessage[]>
 const pending     = new Set();    // page-starts requested but not yet received
 
-let filter = { id:'', dir:'', msgType:'', channel:'' };
+let filter = { id:'', data:'', dir:'', msgType:'', channel:'' };
 let sort   = { col:'i', dir:'asc' };
 
 // Colorization: Map<rowI, colorName>
@@ -476,6 +524,13 @@ let dbcFileName = '';
 
 // Grouping field key or null
 let groupBy = null;
+
+// Search hit state
+let searchHitRowI    = -1;  // 'i' index of highlighted search hit (cleared on filter change)
+let searchMatchPos   = 0;   // 1-based hit counter shown in UI
+let searchTotal      = 0;   // total match count from host
+let lastSearchKey    = '';  // JSON criteria fingerprint; '' = invalidated
+let pendingSearchDir = 'forward';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DOM REFS
@@ -779,6 +834,9 @@ function resetAndRefetch() {
   selectedRowI = -1;
   selectedSet.clear();
   updateSelCount();
+  searchHitRowI = -1;
+  lastSearchKey = '';
+  updateSearchMatchCount();
   scroller.scrollTop = 0;
 
   // Optimistically clear the row count now — the real value arrives with page 0.
@@ -811,6 +869,7 @@ function renderRow(div, m) {
   else if (isMultiSel)    cls += ' sel-multi';
   else if (m.err)         cls += ' r-err';
   else if (m.type==='FD') cls += ' r-fd';
+  if (m.i === searchHitRowI) { cls += ' row-search-hit'; }
 
   div.className  = cls;
   div.dataset.mi = m.i;
@@ -835,6 +894,7 @@ function buildRowHTML(m) {
     switch (col.key) {
       case 'i':     content = '<span class="t-idx">'   + (m.i+1)    + '</span>'; break;
       case 't':     content = '<span class="t-time">'  + m.t        + '</span>'; break;
+      case 'utc':   content = '<span class="t-time">'  + m.utc      + '</span>'; break;
       case 'id':    content = '<span class="t-id">'    + esc(m.id)  + '</span>'; break;
       case 'name':  content = m.msgName
                       ? '<span style="color:var(--purple);font-weight:500">' + esc(m.msgName) + '</span>'
@@ -1011,7 +1071,7 @@ function showContextMenu(x, y, mi) {
 
   bind('cxCopyRow', () => {
     if (!m) return;
-    copyText([m.i+1, m.t, m.id, m.type, m.dir, m.ch, m.dlc, m.data, m.flags].join('\\t'));
+    copyText([m.i+1, m.t, m.utc, m.id, m.type, m.dir, m.ch, m.dlc, m.data, m.flags].join('\\t'));
     closeCtxMenu();
   });
 
@@ -1019,13 +1079,13 @@ function showContextMenu(x, y, mi) {
   bind('cxCopyData', () => { if (m) copyText(m.data);  closeCtxMenu(); });
 
   bind('cxCopyCsv', () => {
-    const rows = [['#','Time','Arb ID','Type','Dir','Ch','DLC','Data','Flags'].join(',')];
+    const rows = [['#','Time','UTC','Arb ID','Type','Dir','Ch','DLC','Data','Flags'].join(',')];
     const all  = [];
     pageCache.forEach(page => page.forEach(r => {
       if (selectedSet.has(r.i) || r.i === selectedRowI) all.push(r);
     }));
     all.sort((a,b) => a.i - b.i).forEach(r => {
-      rows.push([r.i+1, r.t, r.id, r.type, r.dir, r.ch, r.dlc, '"'+r.data+'"', r.flags].join(','));
+      rows.push([r.i+1, r.t, r.utc, r.id, r.type, r.dir, r.ch, r.dlc, '"'+r.data+'"', r.flags].join(','));
     });
     copyText(rows.join('\\n'));
     closeCtxMenu();
@@ -1188,6 +1248,7 @@ function showDetail(m) {
   let html =
     dr('Index',     m.i + 1) +
     dr('Rel. Time', '<span style="color:var(--blue)">' + m.t + ' s</span>') +
+    dr('UTC',       '<span style="color:var(--blue)">' + esc(m.utc) + '</span>') +
     dr('Arb. ID',   '<span style="color:#e8c8a0">' + esc(m.id) + '</span>') +
     (m.msgName ? dr('Name', '<span style="color:var(--purple);font-weight:500">' + esc(m.msgName) + '</span>') : '') +
     dr('Type',      m.type) +
@@ -1249,11 +1310,17 @@ function dr(k, v) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const fId   = document.getElementById('fId');
+const fData = document.getElementById('fData');
 const fDir  = document.getElementById('fDir');
 const fType = document.getElementById('fType');
 const fCh   = document.getElementById('fCh');
 const filterIdWrap = document.getElementById('filterIdWrap');
 const filterResize = document.getElementById('filterResize');
+const sId   = document.getElementById('sId');
+const sData = document.getElementById('sData');
+const sDir  = document.getElementById('sDir');
+const sType = document.getElementById('sType');
+const sCh   = document.getElementById('sCh');
 
 const savedFilterIdWidth = Number(localStorage.getItem('blf.filterIdWidth') || 0);
 if (filterIdWrap && savedFilterIdWidth > 0) {
@@ -1263,6 +1330,7 @@ if (filterIdWrap && savedFilterIdWidth > 0) {
 
 function onFilterChange() {
   filter.id      = (fId?.value   ?? '').trim().toLowerCase();
+  filter.data    = (fData?.value ?? '').trim().toLowerCase();
   filter.dir     = fDir?.value   ?? '';
   filter.msgType = fType?.value  ?? '';
   filter.channel = fCh?.value    ?? '';
@@ -1270,6 +1338,7 @@ function onFilterChange() {
 }
 
 fId?.addEventListener('input',   onFilterChange);
+fData?.addEventListener('input', onFilterChange);
 fDir?.addEventListener('change', onFilterChange);
 fType?.addEventListener('change',onFilterChange);
 fCh?.addEventListener('change',  onFilterChange);
@@ -1286,7 +1355,7 @@ function filterWidthBounds() {
 }
 
 filterResize?.addEventListener('pointerdown', e => {
-  if (!filterIdWrap) return;
+  if (!filterIdWrap) { return; }
   e.preventDefault();
   filterResizePointerId = e.pointerId;
   filterResizeStartX = e.clientX;
@@ -1296,14 +1365,14 @@ filterResize?.addEventListener('pointerdown', e => {
 });
 
 filterResize?.addEventListener('pointermove', e => {
-  if (!filterIdWrap || filterResizePointerId !== e.pointerId) return;
+  if (!filterIdWrap || filterResizePointerId !== e.pointerId) { return; }
   const bounds = filterWidthBounds();
   const next = Math.max(bounds.min, Math.min(bounds.max, filterResizeStartW + e.clientX - filterResizeStartX));
   filterIdWrap.style.width = next + 'px';
 });
 
 function endFilterResize(e) {
-  if (!filterIdWrap || filterResizePointerId !== e.pointerId) return;
+  if (!filterIdWrap || filterResizePointerId !== e.pointerId) { return; }
   filterResizePointerId = null;
   filterResize?.classList.remove('active');
   localStorage.setItem('blf.filterIdWidth', String(Math.round(filterIdWrap.getBoundingClientRect().width)));
@@ -1313,8 +1382,152 @@ function endFilterResize(e) {
 filterResize?.addEventListener('pointerup', endFilterResize);
 filterResize?.addEventListener('pointercancel', endFilterResize);
 
+// ── Search ID resize ──────────────────────────────────────────────────────────
+
+const searchIdWrap  = document.getElementById('searchIdWrap');
+const searchResize  = document.getElementById('searchResize');
+
+const savedSearchIdWidth = Number(localStorage.getItem('blf.searchIdWidth') || 0);
+if (searchIdWrap && savedSearchIdWidth > 0) {
+  const maxW = Math.max(160, Math.min(window.innerWidth * 0.8, 960));
+  searchIdWrap.style.width = Math.max(160, Math.min(maxW, savedSearchIdWidth)) + 'px';
+}
+
+let searchResizePointerId = null;
+let searchResizeStartX = 0;
+let searchResizeStartW = 0;
+
+function searchIdWidthBounds() {
+  return { min: 160, max: Math.max(160, Math.min(window.innerWidth * 0.8, 960)) };
+}
+
+searchResize?.addEventListener('pointerdown', e => {
+  if (!searchIdWrap) { return; }
+  e.preventDefault();
+  searchResizePointerId = e.pointerId;
+  searchResizeStartX = e.clientX;
+  searchResizeStartW = searchIdWrap.getBoundingClientRect().width;
+  searchResize.classList.add('active');
+  searchResize.setPointerCapture(e.pointerId);
+});
+
+searchResize?.addEventListener('pointermove', e => {
+  if (!searchIdWrap || searchResizePointerId !== e.pointerId) { return; }
+  const bounds = searchIdWidthBounds();
+  const next = Math.max(bounds.min, Math.min(bounds.max, searchResizeStartW + e.clientX - searchResizeStartX));
+  searchIdWrap.style.width = next + 'px';
+});
+
+function endSearchResize(e) {
+  if (!searchIdWrap || searchResizePointerId !== e.pointerId) { return; }
+  searchResizePointerId = null;
+  searchResize?.classList.remove('active');
+  localStorage.setItem('blf.searchIdWidth', String(Math.round(searchIdWrap.getBoundingClientRect().width)));
+  searchResize?.releasePointerCapture(e.pointerId);
+}
+
+searchResize?.addEventListener('pointerup', endSearchResize);
+searchResize?.addEventListener('pointercancel', endSearchResize);
+
+// ── Search match counter ──────────────────────────────────────────────────────
+
+function updateSearchMatchCount() {
+  const el = document.getElementById('searchMatchCount');
+  if (!el) { return; }
+  el.textContent = (searchMatchPos > 0 && searchTotal > 0)
+    ? searchMatchPos + ' / ' + searchTotal
+    : '';
+}
+
+function getSearchState() {
+  return {
+    id:      (sId?.value   ?? '').trim().toLowerCase(),
+    data:    (sData?.value ?? '').trim().toLowerCase(),
+    dir:     sDir?.value   ?? '',
+    msgType: sType?.value  ?? '',
+    channel: sCh?.value    ?? '',
+  };
+}
+
+function hasSearchCriteria(search) {
+  return Boolean(search.id || search.data || search.dir || search.msgType || search.channel);
+}
+
+function runSearchNext() {
+  const search = getSearchState();
+  if (!hasSearchCriteria(search)) { showToast('Enter search criteria'); return; }
+
+  const key = JSON.stringify(search);
+  const isNew = key !== lastSearchKey;
+  if (isNew) {
+    lastSearchKey  = key;
+    searchMatchPos = 0;
+    searchTotal    = 0;
+    searchHitRowI  = -1;
+  }
+  pendingSearchDir = 'forward';
+
+  vscode.postMessage({
+    type: 'searchFirst',
+    filter: { ...filter },
+    sort: { ...sort },
+    search,
+    fromIndex:  isNew ? 0 : searchHitRowI + 1,
+    direction:  'forward',
+  });
+}
+
+function runSearchPrev() {
+  const search = getSearchState();
+  if (!hasSearchCriteria(search)) { showToast('Enter search criteria'); return; }
+
+  const key = JSON.stringify(search);
+  const isNew = key !== lastSearchKey;
+  if (isNew) {
+    lastSearchKey  = key;
+    searchMatchPos = 0;
+    searchTotal    = 0;
+    searchHitRowI  = -1;
+  }
+  pendingSearchDir = 'backward';
+
+  vscode.postMessage({
+    type: 'searchFirst',
+    filter: { ...filter },
+    sort: { ...sort },
+    search,
+    // When starting a new backward search, use MAX_SAFE_INTEGER so the host's
+    // Math.min(beforeIndex-1, length-1) clamps to the last row.
+    fromIndex:  isNew ? Number.MAX_SAFE_INTEGER : searchHitRowI,
+    direction:  'backward',
+  });
+}
+
+document.getElementById('btnSearchNext')?.addEventListener('click', runSearchNext);
+document.getElementById('btnSearchPrev')?.addEventListener('click', runSearchPrev);
+[sId, sData, sDir, sType, sCh].forEach(el => {
+  el?.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') { runSearchNext(); }
+  });
+});
+
+document.getElementById('btnClearSearch')?.addEventListener('click', () => {
+  if (sId)   { sId.value   = ''; }
+  if (sData) { sData.value = ''; }
+  if (sDir)  { sDir.value  = ''; }
+  if (sType) { sType.value = ''; }
+  if (sCh)   { sCh.value   = ''; }
+  searchHitRowI  = -1;
+  searchMatchPos = 0;
+  searchTotal    = 0;
+  lastSearchKey  = '';
+  updateSearchMatchCount();
+  renderViewport();
+});
+
 document.getElementById('btnClear').addEventListener('click', () => {
   if (fId)   fId.value   = '';
+  if (fData) fData.value = '';
   if (fDir)  fDir.value  = '';
   if (fType) fType.value = '';
   if (fCh)   fCh.value   = '';
@@ -1370,6 +1583,10 @@ window.addEventListener('message', ({ data: msg }) => {
       const o = document.createElement('option');
       o.value = String(c); o.textContent = 'Ch ' + c;
       fCh?.appendChild(o);
+
+      const so = document.createElement('option');
+      so.value = String(c); so.textContent = 'Ch ' + c;
+      sCh?.appendChild(so);
     });
 
     // Parse errors
@@ -1417,6 +1634,38 @@ window.addEventListener('message', ({ data: msg }) => {
       rCountEl.textContent = totalFiltered.toLocaleString() + ' rows';
     }
 
+    renderViewport();
+  }
+
+  // ── searchResult ─────────────────────────────────────────────────────────
+  else if (msg.type === 'searchResult') {
+    if (msg.index < 0) {
+      showToast(msg.message || 'No matching message found');
+      return;
+    }
+
+    if (msg.total !== undefined && msg.total > 0) { searchTotal = msg.total; }
+
+    if (searchMatchPos === 0) {
+      // First result: forward → pos 1, backward → pos N (last match)
+      searchMatchPos = pendingSearchDir === 'backward' ? (searchTotal || 1) : 1;
+    } else if (pendingSearchDir === 'forward') {
+      searchMatchPos = searchTotal > 0 ? (searchMatchPos % searchTotal) + 1 : 1;
+    } else {
+      searchMatchPos = searchMatchPos <= 1 ? (searchTotal || 1) : searchMatchPos - 1;
+    }
+
+    searchHitRowI = msg.index;
+    updateSearchMatchCount();
+
+    selectedSet.clear();
+    selectedRowI = msg.index;
+    lastClickedI = msg.index;
+    updateSelCount();
+    if (msg.row) { showDetail(msg.row); }
+
+    scroller.scrollTop = Math.max(0, msg.index * ROW_H - ROW_H * 3);
+    requestPagesForRange(msg.index, msg.index);
     renderViewport();
   }
 

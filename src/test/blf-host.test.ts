@@ -17,7 +17,7 @@ function msg(arbitrationId: number, channel: number): CANMessage {
   };
 }
 
-const no: FilterState = { id: '', dir: '', msgType: '', channel: '' };
+const no: FilterState = { id: '', data: '', dir: '', msgType: '', channel: '' };
 
 // Messages mirror the two-channel.blf fixture:
 //   ch0: 0x100, 0x200, 0x300
@@ -77,7 +77,7 @@ suite('applyFilter – id@channel', () => {
 
   test('@channel suffix overrides global channel dropdown', () => {
     // id='100@1' with global channel='0': @1 wins, returns ch1 message
-    const r = applyFilter(msgs, { id: '100@1', channel: '0', dir: '', msgType: '' });
+    const r = applyFilter(msgs, { id: '100@1', data: '', channel: '0', dir: '', msgType: '' });
     assert.strictEqual(r.length, 1);
     assert.strictEqual(r[0].channel, 1);
   });

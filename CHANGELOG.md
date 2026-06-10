@@ -2,6 +2,18 @@
 
 All notable changes to the **BLF Viewer** extension are documented here.
 
+## [1.2.0] — 2026-06-10
+
+### Added
+
+- **UTC timestamp column** — a default-visible **UTC** column shows ISO 8601 timestamps derived from the file's base timestamp. Sortable. Included in copy-row, CSV export, and detail panel. (contributed by [@lofyzhou](https://github.com/lofyzhou))
+- **Payload data filter** — new **Data bytes** field in the Filter toolbar matches contiguous byte sequences (`3E 80`, `22F190`, `0x22 0xF1 0x90`). Updated live as you type. (contributed by [@lofyzhou](https://github.com/lofyzhou))
+- **Search panel** — separate **Search** toolbar row to locate the first matching row (by ID, data bytes, direction, type, or channel) without changing the visible filtered dataset. (contributed by [@lofyzhou](https://github.com/lofyzhou))
+
+### Fixed
+
+- **CAN FD Message 64 parser** — `CAN_FD_MESSAGE_64` objects no longer read from the wrong byte offset (`extDataOffset` was incorrectly used as the payload start). Buffer size check corrected from `pos+32` to `pos+40`. DLC-to-length mapping added so 12/16/20/24/32/48/64-byte payloads parse correctly when `validBytes` is 0. (contributed by [@lofyzhou](https://github.com/lofyzhou))
+
 ## [1.1.0] — 2026-06-06
 
 ### Added

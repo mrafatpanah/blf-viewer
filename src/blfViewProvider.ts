@@ -3,7 +3,7 @@ import * as path    from 'path';
 import * as fs      from 'fs';
 
 import { BLFReader }                        from './blf-parser';
-import { applyFilter, applySort, toWire }   from './blf-host';
+import { applyFilter, applySort, findFirstMatchingIndex, findLastMatchingIndex, countMatches, toWire } from './blf-host';
 import { getWebviewHtml, getNonce }         from './blf-webview';
 import { WebviewMessage }                   from './blf-types';
 import { parseDbcFile, DbcDatabase }        from './dbc-parser';
@@ -47,9 +47,10 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
 
     // Handle messages from the webview
     webviewPanel.webview.onDidReceiveMessage(async (req: WebviewMessage) => {
+      if (!messages) { return; }
 
       if (req.type === 'requestPage') {
-        const filtered = applyFilter(messages!, req.filter);
+        const filtered = applyFilter(messages, req.filter);
         const sorted   = applySort(filtered,    req.sort);
         const page     = sorted.slice(req.startIndex, req.startIndex + req.count);
 
@@ -58,6 +59,33 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
           startIndex:    req.startIndex,
           totalFiltered: sorted.length,
           rows:          page.map((m, li) => toWire(m, req.startIndex + li, dbcDb)),
+        });
+        return;
+      }
+
+      if (req.type === 'searchFirst') {
+        const filtered  = applyFilter(messages, req.filter);
+        const sorted    = applySort(filtered, req.sort);
+        const fromIndex = req.fromIndex ?? 0;
+        const direction = req.direction ?? 'forward';
+
+        let index: number;
+        if (direction === 'backward') {
+          index = findLastMatchingIndex(sorted, req.search, fromIndex);
+          if (index < 0) { index = findLastMatchingIndex(sorted, req.search, sorted.length); }
+        } else {
+          index = findFirstMatchingIndex(sorted, req.search, fromIndex);
+          if (index < 0 && fromIndex > 0) { index = findFirstMatchingIndex(sorted, req.search, 0); }
+        }
+
+        const total = index >= 0 ? countMatches(sorted, req.search) : 0;
+
+        webviewPanel.webview.postMessage({
+          type:    'searchResult',
+          index,
+          row:     index >= 0 ? toWire(sorted[index], index, dbcDb) : undefined,
+          message: index >= 0 ? undefined : 'No matching message found',
+          total,
         });
         return;
       }

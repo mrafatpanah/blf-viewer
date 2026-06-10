@@ -3,19 +3,21 @@
 
 export interface FilterState {
   id:      string;   // hex string, case-insensitive substring match
+  data:    string;   // hex byte sequence, case-insensitive payload match
   dir:     string;   // '' | 'RX' | 'TX'
   msgType: string;   // '' | 'STD' | 'FD' | 'ERR'
   channel: string;   // '' | '0' | '1' | ...
 }
 
 export interface SortState {
-  col: 'i' | 't' | 'id' | 'type' | 'dir' | 'ch' | 'dlc';
+  col: 'i' | 't' | 'utc' | 'id' | 'type' | 'dir' | 'ch' | 'dlc';
   dir: 'asc' | 'desc';
 }
 
 // Messages sent from webview → host
 export type WebviewMessage =
   | { type: 'requestPage'; startIndex: number; count: number; filter: FilterState; sort: SortState; }
+  | { type: 'searchFirst'; filter: FilterState; sort: SortState; search: FilterState; fromIndex?: number; direction?: 'forward' | 'backward'; }
   | { type: 'openDbcFile' }
   | { type: 'clearDbc' };
 
@@ -34,6 +36,7 @@ export interface WireSignal {
 export interface WireMessage {
   i:        number;           // position in the filtered+sorted result set
   t:        string;           // formatted relative timestamp
+  utc:      string;           // formatted absolute UTC timestamp
   id:       string;           // formatted arb ID string  e.g. "0x1A2B3C4D"
   rawId:    number;           // raw integer arb ID (for sorting / filter by same ID)
   type:     'STD' | 'FD' | 'ERR';
@@ -71,6 +74,13 @@ export type HostMessage =
       startIndex:    number;
       totalFiltered: number;
       rows:          WireMessage[];
+    }
+  | {
+      type:    'searchResult';
+      index:   number;
+      row?:    WireMessage;
+      message?: string;
+      total?:  number;
     }
   | {
       type:    'error';
