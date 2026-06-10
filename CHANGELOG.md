@@ -9,10 +9,16 @@ All notable changes to the **BLF Viewer** extension are documented here.
 - **UTC timestamp column** — a default-visible **UTC** column shows ISO 8601 timestamps derived from the file's base timestamp. Sortable. Included in copy-row, CSV export, and detail panel. (contributed by [@lofyzhou](https://github.com/lofyzhou))
 - **Payload data filter** — new **Data bytes** field in the Filter toolbar matches contiguous byte sequences (`3E 80`, `22F190`, `0x22 0xF1 0x90`). Updated live as you type. (contributed by [@lofyzhou](https://github.com/lofyzhou))
 - **Search panel** — separate **Search** toolbar row to locate the first matching row (by ID, data bytes, direction, type, or channel) without changing the visible filtered dataset. (contributed by [@lofyzhou](https://github.com/lofyzhou))
+- **Search navigation (Find Next / Find Prev)** — ◀ / ▶ buttons step through all matches; a `current / total` counter updates with each navigation. First ◀ press jumps to the last match.
+- **Search hit highlight** — amber left-border stripe marks the current search result, composable with row selection and colorize.
+- **Resizable Search ID field** — drag handle on the Search ID input, width persisted in `localStorage`.
 
 ### Fixed
 
 - **CAN FD Message 64 parser** — `CAN_FD_MESSAGE_64` objects no longer read from the wrong byte offset (`extDataOffset` was incorrectly used as the payload start). Buffer size check corrected from `pos+32` to `pos+40`. DLC-to-length mapping added so 12/16/20/24/32/48/64-byte payloads parse correctly when `validBytes` is 0. (contributed by [@lofyzhou](https://github.com/lofyzhou))
+- **Filter toolbar layout** — fixed CSS gap between the data-bytes input and dropdowns; added Filter / Search panel labels.
+- **ID filter stray comma** — typing `,` or a trailing comma (e.g. `1A3,`) now returns zero rows instead of showing all messages.
+- **Data filter invalid hex** — fully non-hex input (e.g. `GG`) now returns zero rows instead of silently disabling the filter.
 
 ## [1.1.0] — 2026-06-06
 
