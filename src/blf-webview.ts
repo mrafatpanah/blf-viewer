@@ -1496,8 +1496,10 @@ function runSearchPrev() {
     filter: { ...filter },
     sort: { ...sort },
     search,
-    fromIndex:  isNew ? 0 : searchHitRowI,
-    direction:  isNew ? 'forward' : 'backward',
+    // When starting a new backward search, use MAX_SAFE_INTEGER so the host's
+    // Math.min(beforeIndex-1, length-1) clamps to the last row.
+    fromIndex:  isNew ? Number.MAX_SAFE_INTEGER : searchHitRowI,
+    direction:  'backward',
   });
 }
 
@@ -1645,7 +1647,8 @@ window.addEventListener('message', ({ data: msg }) => {
     if (msg.total !== undefined && msg.total > 0) { searchTotal = msg.total; }
 
     if (searchMatchPos === 0) {
-      searchMatchPos = 1;
+      // First result: forward → pos 1, backward → pos N (last match)
+      searchMatchPos = pendingSearchDir === 'backward' ? (searchTotal || 1) : 1;
     } else if (pendingSearchDir === 'forward') {
       searchMatchPos = searchTotal > 0 ? (searchMatchPos % searchTotal) + 1 : 1;
     } else {

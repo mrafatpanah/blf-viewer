@@ -47,7 +47,9 @@ type Seg = { idPart: string; chNum: number | null };
 
 interface CompiledFilterCriteria {
   parsedSegs: Seg[];
+  idLower: string;
   dataLower: string;
+  rawData: string;
   dir: string;
   msgType: string;
   channel: string;
@@ -56,6 +58,7 @@ interface CompiledFilterCriteria {
 
 function compileFilterCriteria(f: FilterState): CompiledFilterCriteria {
   const idLower = f.id.toLowerCase().trim();
+  const rawData = (f.data ?? '').trim();
   const dataLower = normalizeDataFilter(f.data);
   const { dir, msgType, channel } = f;
 
@@ -79,11 +82,15 @@ function compileFilterCriteria(f: FilterState): CompiledFilterCriteria {
 
   return {
     parsedSegs,
+    idLower,
     dataLower,
+    rawData,
     dir,
     msgType,
     channel,
-    active: Boolean(parsedSegs.length || dataLower || dir || msgType || channel),
+    // idLower covers stray-comma input (parsedSegs empty but id field non-empty)
+    // rawData covers fully-invalid hex input (normalizes to empty string)
+    active: Boolean(idLower || rawData || dir || msgType || channel),
   };
 }
 
@@ -92,7 +99,7 @@ function normalizeDataFilter(value: string | undefined): string {
 }
 
 function matchesFilterCriteria(m: CANMessage, criteria: CompiledFilterCriteria): boolean {
-  const { parsedSegs, dataLower, dir, msgType, channel } = criteria;
+  const { parsedSegs, idLower, dataLower, rawData, dir, msgType, channel } = criteria;
 
   // Direction filter
   if (dir && (m.isRx ? 'RX' : 'TX') !== dir) { return false; }
@@ -103,7 +110,8 @@ function matchesFilterCriteria(m: CANMessage, criteria: CompiledFilterCriteria):
     if (t !== msgType) { return false; }
   }
 
-  // Data filter — matches a contiguous payload byte sequence
+  // Data filter — fail-closed if input is non-empty but fully invalid hex (e.g. "GG" → "")
+  if (rawData && !dataLower) { return false; }
   if (dataLower && !m.data.toString('hex').toLowerCase().includes(dataLower)) {
     return false;
   }
@@ -131,6 +139,9 @@ function matchesFilterCriteria(m: CANMessage, criteria: CompiledFilterCriteria):
     });
 
     if (!matchesAny) { return false; }
+  } else if (idLower) {
+    // ID was typed but all segments were malformed (e.g. stray comma) — match nothing
+    return false;
   } else {
     // No ID filter: global channel filter only
     if (channel !== '' && String(m.channel) !== channel) { return false; }
