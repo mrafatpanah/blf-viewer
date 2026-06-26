@@ -3,10 +3,11 @@ import * as path    from 'path';
 import * as fs      from 'fs';
 
 import { BLFReader }                        from './blf-parser';
-import { applyFilter, applySort, findFirstMatchingIndex, findLastMatchingIndex, countMatches, toWire } from './blf-host';
+import { applyFilter, applySort, findFirstMatchingIndex, findLastMatchingIndex, countMatches, toWire, reconstructUdsMessages } from './blf-host';
 import { getWebviewHtml, getNonce }         from './blf-webview';
 import { WebviewMessage }                   from './blf-types';
 import { parseDbcFile, DbcDatabase }        from './dbc-parser';
+import { parseCddFile, CddDatabase }        from './cdd-parser';
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 
@@ -42,15 +43,35 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
     let messages = await this.parseFile(document.uri.fsPath, webviewPanel);
     if (!messages) { return; } // parse error already posted to webview
 
-    // Per-panel DBC database (in-memory, per-session)
+    // Per-panel DBC and CDD databases (in-memory, per-session)
     let dbcDb: DbcDatabase | null = null;
+    let cddDb: CddDatabase | null = null;
+    let originalMessages: import('./blf-parser').CANMessage[] | null = messages;
+    let processedMessages: import('./blf-parser').CANMessage[] | null = messages;
+
+    const rebuildProcessedMessages = () => {
+      if (!originalMessages) {
+        processedMessages = null;
+        return;
+      }
+      if (cddDb && cddDb.requestCanId !== null && cddDb.responseCanId !== null) {
+        processedMessages = reconstructUdsMessages(
+          originalMessages,
+          cddDb.requestCanId,
+          cddDb.responseCanId,
+          cddDb
+        );
+      } else {
+        processedMessages = originalMessages;
+      }
+    };
 
     // Handle messages from the webview
     webviewPanel.webview.onDidReceiveMessage(async (req: WebviewMessage) => {
-      if (!messages) { return; }
+      if (!processedMessages) { return; }
 
       if (req.type === 'requestPage') {
-        const filtered = applyFilter(messages, req.filter);
+        const filtered = applyFilter(processedMessages, req.filter);
         const sorted   = applySort(filtered,    req.sort);
         const page     = sorted.slice(req.startIndex, req.startIndex + req.count);
 
@@ -64,7 +85,7 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
       }
 
       if (req.type === 'searchFirst') {
-        const filtered  = applyFilter(messages, req.filter);
+        const filtered  = applyFilter(processedMessages, req.filter);
         const sorted    = applySort(filtered, req.sort);
         const fromIndex = req.fromIndex ?? 0;
         const direction = req.direction ?? 'forward';
@@ -122,10 +143,54 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
       if (req.type === 'clearDbc') {
         dbcDb = null;
         webviewPanel.webview.postMessage({ type: 'dbcCleared' });
+        return;
+      }
+
+      if (req.type === 'openCddFile') {
+        const picked = await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          filters: { 'CDD Files': ['cdd'] },
+          openLabel: 'Import CDD',
+        });
+        if (!picked?.length) { return; }
+        try {
+          const MAX_CDD_BYTES = 10 * 1024 * 1024; // 10 MB
+          const stat = fs.statSync(picked[0].fsPath);
+          if (stat.size > MAX_CDD_BYTES) {
+            throw new Error(`CDD file is too large (${(stat.size / 1024 / 1024).toFixed(1)} MB); limit is 10 MB`);
+          }
+          const text = fs.readFileSync(picked[0].fsPath, 'utf8');
+          cddDb = parseCddFile(text, path.basename(picked[0].fsPath));
+          rebuildProcessedMessages();
+          webviewPanel.webview.postMessage({
+            type:         'cddLoaded',
+            fileName:     cddDb.fileName,
+            serviceCount: cddDb.services.size,
+          });
+        } catch (err) {
+          webviewPanel.webview.postMessage({
+            type:    'error',
+            message: 'CDD parse error: ' + (err instanceof Error ? err.message : String(err)),
+          });
+        }
+        return;
+      }
+
+      if (req.type === 'clearCdd') {
+        cddDb = null;
+        rebuildProcessedMessages();
+        webviewPanel.webview.postMessage({ type: 'cddCleared' });
+        return;
       }
     });
 
-    webviewPanel.onDidDispose(() => { messages = null; dbcDb = null; });
+    webviewPanel.onDidDispose(() => {
+      messages = null;
+      originalMessages = null;
+      processedMessages = null;
+      dbcDb = null;
+      cddDb = null;
+    });
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────
