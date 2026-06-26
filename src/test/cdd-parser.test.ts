@@ -183,6 +183,60 @@ suite('UdsReconstructor', () => {
     assert.deepStrictEqual(Array.from(ch1.completedUds.data), [0x62, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA]);
   });
 
+  test('CAN-FD single-frame escape requires an FD frame (classic 0x00 frame is not escaped)', () => {
+    const r = new UdsReconstructor(0x782, 0x78A);
+    // Classic 8-byte frame, first byte 0x00 — must NOT be read as an escaped SF
+    const classic = r.processMessage(createMsg(0x782, [0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77]));
+    assert.strictEqual(classic.otpType, 'SF');
+    assert.strictEqual(classic.completedUds, undefined); // len 0 → no UDS service emitted
+
+    // FD frame with isFd set: escape honoured, real length in byte 1
+    const fd: CANMessage = {
+      relativeTimestamp: 0.1, absoluteTimestamp: 1000, arbitrationId: 0x782,
+      isExtendedId: false, isRemoteFrame: false, isRx: false, dlc: 12,
+      data: Buffer.from([0x00, 0x03, 0x10, 0x01, 0x02, 0, 0, 0, 0, 0, 0, 0]),
+      channel: 0, isFd: true
+    };
+    const fdRes = r.processMessage(fd);
+    assert.strictEqual(fdRes.otpType, 'SF');
+    assert.ok(fdRes.completedUds);
+    assert.deepStrictEqual(Array.from(fdRes.completedUds.data), [0x10, 0x01, 0x02]);
+  });
+
+  test('malformed short negative response does not throw and is labelled', () => {
+    const r = new UdsReconstructor(0x782, 0x78A);
+    // 1-byte SF carrying only 0x7F → classified neg, payload too short for SID/NRC
+    const info = r.processMessage(createMsg(0x78A, [0x01, 0x7F, 0, 0, 0, 0, 0, 0]));
+    assert.ok(info.completedUds);
+    assert.strictEqual(info.completedUds.udsType, 'neg');
+    // reconstructUdsMessages must annotate without throwing
+    const out = reconstructUdsMessages([createMsg(0x78A, [0x01, 0x7F, 0, 0, 0, 0, 0, 0])], 0x782, 0x78A);
+    const uds = out.find(m => m.isUds);
+    assert.ok(uds);
+    assert.strictEqual(uds.service, 'NegativeResponse');
+    assert.ok(uds.name?.includes('malformed'));
+  });
+
+  test('zero-length single frame emits no UDS message', () => {
+    const out = reconstructUdsMessages([createMsg(0x782, [0x00, 0, 0, 0, 0, 0, 0, 0])], 0x782, 0x78A);
+    assert.strictEqual(out.some(m => m.isUds), false);
+    assert.strictEqual(out.filter(m => m.isOtp).length, 1); // raw frame still shown
+  });
+
+  test('src/dst use arbitrationId, correct even when a response is TX (ECU-side capture)', () => {
+    // Response frame on resCanId but isRx=false (createMsgCh sets isRx only for 0x78A; force via object)
+    const ecuSideResponse: CANMessage = {
+      relativeTimestamp: 0.1, absoluteTimestamp: 1000, arbitrationId: 0x78A,
+      isExtendedId: false, isRemoteFrame: false, isRx: false, dlc: 8, // TX response
+      data: Buffer.from([0x02, 0x50, 0x01, 0, 0, 0, 0, 0]), channel: 0
+    };
+    const out = reconstructUdsMessages([ecuSideResponse], 0x782, 0x78A);
+    const uds = out.find(m => m.isUds);
+    assert.ok(uds);
+    assert.strictEqual(uds.src, '78A'); // response → sender is the response ID, regardless of isRx
+    assert.strictEqual(uds.dst, '782');
+  });
+
   test('FF_DL 32-bit escape length is honoured', () => {
     const r = new UdsReconstructor(0x782, 0x78A);
     // FF escape: nibble+byte1 == 0, real length in bytes 2..5 = 0x00000009
@@ -306,15 +360,6 @@ suite('reconstructUdsMessages', () => {
     assert.strictEqual(out.length, 1);
     assert.strictEqual(out[0], plain);       // same reference — not copied/annotated
     assert.strictEqual(out[0].isOtp, undefined);
-  });
-
-  test('CAN-FD single-frame escape (len nibble 0, length in byte 1)', () => {
-    const r = new UdsReconstructor(0x782, 0x78A);
-    const info = r.processMessage(createMsg(0x782, [0x00, 0x03, 0x10, 0x01, 0x02, 0, 0, 0]));
-    assert.strictEqual(info.otpType, 'SF');
-    assert.strictEqual(info.pciLen, 2);
-    assert.ok(info.completedUds);
-    assert.deepStrictEqual(Array.from(info.completedUds.data), [0x10, 0x01, 0x02]);
   });
 
   test('negative response service resolved via CDD SID match', () => {

@@ -107,6 +107,7 @@ export type HostMessage =
       type:         'cddLoaded';
       fileName:     string;
       serviceCount: number;
+      active:       boolean;  // false when no Request/Response CAN-ID found → no UDS reconstruction
     }
   | {
       type: 'cddCleared';

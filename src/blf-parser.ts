@@ -52,6 +52,9 @@ interface ObjHeaderBase {
   objectType: number;
 }
 
+// ISO 15765-2 transport-frame classification ('' = not a recognised TP frame).
+export type TpFrameType = '' | 'SF' | 'FF' | 'CF' | 'FC.CTS' | 'FC.WT' | 'FC.OVFLW' | 'TP';
+
 export interface CANMessage {
   // Relative timestamp from start of recording in seconds
   relativeTimestamp: number;
@@ -78,7 +81,7 @@ export interface CANMessage {
   dst?: string;
   conn?: number;
   isOtp?: boolean;
-  otpType?: string;
+  otpType?: TpFrameType;
   formattedData?: string;
 }
 

@@ -40,14 +40,14 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
     webviewPanel.webview.html = getWebviewHtml(getNonce(), fileName);
 
     // Parse in the background; the extension host is the single owner of data
-    let messages = await this.parseFile(document.uri.fsPath, webviewPanel);
-    if (!messages) { return; } // parse error already posted to webview
+    let originalMessages: import('./blf-parser').CANMessage[] | null =
+      await this.parseFile(document.uri.fsPath, webviewPanel);
+    if (!originalMessages) { return; } // parse error already posted to webview
 
     // Per-panel DBC and CDD databases (in-memory, per-session)
     let dbcDb: DbcDatabase | null = null;
     let cddDb: CddDatabase | null = null;
-    let originalMessages: import('./blf-parser').CANMessage[] | null = messages;
-    let processedMessages: import('./blf-parser').CANMessage[] | null = messages;
+    let processedMessages: import('./blf-parser').CANMessage[] | null = originalMessages;
 
     const rebuildProcessedMessages = () => {
       if (!originalMessages) {
@@ -162,10 +162,13 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
           const text = fs.readFileSync(picked[0].fsPath, 'utf8');
           cddDb = parseCddFile(text, path.basename(picked[0].fsPath));
           rebuildProcessedMessages();
+          // "active" = CAN IDs were found, so TP/UDS reconstruction actually ran.
+          const active = cddDb.requestCanId !== null && cddDb.responseCanId !== null;
           webviewPanel.webview.postMessage({
             type:         'cddLoaded',
             fileName:     cddDb.fileName,
             serviceCount: cddDb.services.size,
+            active,
           });
         } catch (err) {
           webviewPanel.webview.postMessage({
@@ -185,7 +188,6 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
     });
 
     webviewPanel.onDidDispose(() => {
-      messages = null;
       originalMessages = null;
       processedMessages = null;
       dbcDb = null;

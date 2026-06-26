@@ -2,7 +2,7 @@
 // Pure functions — no VS Code or webview dependencies.
 // Imported by blfViewProvider.ts.
 
-import { CANMessage } from './blf-parser';
+import { CANMessage, TpFrameType } from './blf-parser';
 import { DbcDatabase, decodeSignal } from './dbc-parser';
 import { FilterState, SortState, WireMessage, WireSignal } from './blf-types';
 import { CddDatabase } from './cdd-parser';
@@ -309,7 +309,7 @@ interface TpStream {
 
 // Result of classifying one CAN frame against ISO 15765-2.
 export interface FrameInfo {
-  otpType:      string;        // 'SF' | 'FF' | 'CF' | 'FC.*' | 'TP' | ''
+  otpType:      TpFrameType;    // 'SF' | 'FF' | 'CF' | 'FC.*' | 'TP' | ''
   completedUds?: CANMessage;   // present when a full UDS message reassembled on this frame
   pciLen:       number;        // count of PCI bytes at frame start
   payloadLen:   number;        // count of real UDS payload bytes carried by THIS frame
@@ -368,11 +368,17 @@ export class UdsReconstructor {
       stream.active = false;
       let len    = data[0] & 0x0F;
       let pciLen = 1;
-      if (len === 0 && data.length > 2) { // CAN-FD SF escape: real length in byte 1
+      // CAN-FD SF escape (real length in byte 1) is only valid for FD frames; a classic
+      // padded frame whose first byte is 0x00 must NOT be reinterpreted as an escaped SF.
+      if (len === 0 && (m.isFd || data.length > 8)) {
         len    = data[1];
         pciLen = 2;
       }
       const payload = data.slice(pciLen, pciLen + len);
+      // A zero-length SF carries no UDS service — emit the raw frame only.
+      if (payload.length === 0) {
+        return { otpType: 'SF', pciLen, payloadLen: 0 };
+      }
       const udsType = isReq ? 'req' : (payload[0] === 0x7F ? 'neg' : 'pos');
       return { otpType: 'SF', completedUds: complete(payload, udsType), pciLen, payloadLen: payload.length };
     }
@@ -422,7 +428,7 @@ export class UdsReconstructor {
 
     if (pciType === 3) { // Flow Control
       const fs = data[0] & 0x0F;
-      let otpType = 'FC.CTS';
+      let otpType: TpFrameType = 'FC.CTS';
       if (fs === 1) { otpType = 'FC.WT'; }
       else if (fs === 2) { otpType = 'FC.OVFLW'; }
       return { otpType, pciLen: Math.min(3, data.length), payloadLen: 0 };
@@ -464,7 +470,22 @@ function annotateUds(uds: CANMessage, cddDb?: CddDatabase | null): void {
   let service = '';
   let diagId = '';
 
+  // A reassembled UDS message can be malformed/truncated (e.g. a 1-byte SF carrying just 0x7F).
+  // Guard every byte access so a short payload labels gracefully instead of throwing.
+  if (payload.length === 0) {
+    uds.name    = `UDS(empty)::${uds.udsType}`;
+    uds.service = 'UDS';
+    uds.diagId  = '';
+    return;
+  }
+
   if (uds.udsType === 'neg') {
+    if (payload.length < 3) {
+      uds.name    = 'NegativeResponse(malformed)';
+      uds.service = 'NegativeResponse';
+      uds.diagId  = toHexBytes(payload);
+      return;
+    }
     const rejectedSid = payload[1];
     const nrc         = payload[2];
     const nrcName     = UDS_NRCS[nrc] || `NRC_0x${nrc.toString(16).toUpperCase()}`;
@@ -544,9 +565,11 @@ export function reconstructUdsMessages(
       activeConnMap.set(m.channel, connCounter++); // next frame on this channel starts a new connection
 
       annotateUds(completedUds, cddDb);
-      // src = sender's CAN ID, dst = receiver's CAN ID (derived, not hardcoded).
-      completedUds.src = completedUds.isRx ? resHex : reqHex;
-      completedUds.dst = completedUds.isRx ? reqHex : resHex;
+      // src = sender's CAN ID, dst = receiver's CAN ID. Keyed on arbitrationId (authoritative),
+      // not isRx — a response can be TX when the log is captured from the ECU/gateway side.
+      const isResponse = completedUds.arbitrationId === resCanId;
+      completedUds.src = isResponse ? resHex : reqHex;
+      completedUds.dst = isResponse ? reqHex : resHex;
 
       result.push(completedUds);
     }

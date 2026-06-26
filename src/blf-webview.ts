@@ -1778,17 +1778,22 @@ window.addEventListener('message', ({ data: msg }) => {
   else if (msg.type === 'cddLoaded') {
     const badge    = document.getElementById('cddBadge');
     const clearBtn = document.getElementById('btnClearCdd');
-    if (badge)    { badge.textContent = msg.fileName + '  (' + msg.serviceCount + ' services)'; badge.style.display = 'inline-flex'; }
+    const suffix   = msg.active ? '' : '  — inactive';
+    if (badge)    { badge.textContent = msg.fileName + '  (' + msg.serviceCount + ' services)' + suffix; badge.style.display = 'inline-flex'; }
     if (clearBtn) { clearBtn.style.display = 'inline-flex'; }
 
-    // Automatically show diagnostic columns
-    ['diagId', 'src', 'dst', 'conn', 'service'].forEach(key => {
-      const col = cols.find(c => c.key === key);
-      if (col) { col.visible = true; }
-    });
-    buildHeader();
+    if (msg.active) {
+      // Automatically show diagnostic columns only when reconstruction actually ran
+      ['diagId', 'src', 'dst', 'conn', 'service'].forEach(key => {
+        const col = cols.find(c => c.key === key);
+        if (col) { col.visible = true; }
+      });
+      buildHeader();
+      showToast('CDD loaded: ' + msg.fileName);
+    } else {
+      showToast('CDD loaded but no Request/Response CAN-ID found — diagnostics inactive');
+    }
 
-    showToast('CDD loaded: ' + msg.fileName);
     resetAndRefetch();
   }
 
