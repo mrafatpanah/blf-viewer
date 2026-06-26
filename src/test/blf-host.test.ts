@@ -83,12 +83,12 @@ suite('applyFilter – id@channel', () => {
   });
 
   test('malformed @channel segment is dropped silently', () => {
-    // '100@abc' → non-integer channel → segment dropped → no id filter → all 6 returned
-    assert.strictEqual(applyFilter(msgs, { ...no, id: '100@abc' }).length, 6);
+    // '100@abc' → non-integer channel → segment dropped → no valid id filter → fail-closed → 0 returned
+    assert.strictEqual(applyFilter(msgs, { ...no, id: '100@abc' }).length, 0);
   });
 
   test('empty @channel part is dropped', () => {
-    // '100@' → chPart='' → fails /^\d+$/ → dropped → all 6 returned
-    assert.strictEqual(applyFilter(msgs, { ...no, id: '100@' }).length, 6);
+    // '100@' → chPart='' → fails /^\d+$/ → dropped → no valid id filter → fail-closed → 0 returned
+    assert.strictEqual(applyFilter(msgs, { ...no, id: '100@' }).length, 0);
   });
 });

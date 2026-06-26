@@ -68,6 +68,18 @@ export interface CANMessage {
   isFd?: boolean;
   bitrateSwitch?: boolean;
   errorStateIndicator?: boolean;
+  // UDS diagnostics columns
+  isUds?: boolean;
+  udsType?: 'req' | 'pos' | 'neg';
+  diagId?: string;
+  name?: string;
+  service?: string;
+  src?: string;
+  dst?: string;
+  conn?: number;
+  isOtp?: boolean;
+  otpType?: string;
+  formattedData?: string;
 }
 
 // Binary parsing utilities
