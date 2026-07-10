@@ -5,3 +5,6 @@ node_modules
 *.vsix
 CLAUDE.md
 docs/superpowers/
+coverage/
+.nyc_output/
+*.lcov

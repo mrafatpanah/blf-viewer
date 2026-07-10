@@ -70,6 +70,10 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
     <button class="btn" id="btnImportDbc" title="Import DBC file">⊕ DBC</button>
     <span class="dbc-badge" id="dbcBadge" style="display:none"></span>
     <button class="btn" id="btnClearDbc" style="display:none" title="Remove DBC">✕</button>
+    <span style="width:1px;height:18px;background:var(--border);flex-shrink:0"></span>
+    <button class="btn" id="btnImportCdd" title="Import CDD file">⊕ CDD</button>
+    <span class="cdd-badge" id="cddBadge" style="display:none"></span>
+    <button class="btn" id="btnClearCdd" style="display:none" title="Remove CDD">✕</button>
   </div>
 
   <!-- Search toolbar -->
@@ -447,6 +451,15 @@ const CSS = `
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
 
+  /* CDD badge in toolbar */
+  .cdd-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 10px; font-size: 11px;
+    background: rgba(204,167,0,.15); color: var(--yellow);
+    font-family: var(--mono); max-width: 220px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
   /* Signal section in detail panel */
   .sig-section-head {
     padding: 8px 14px 4px; font-size: 10px; text-transform: uppercase;
@@ -483,17 +496,22 @@ const PAGE_SZ  = 60;   // rows per postMessage round-trip
 // 'flex:true' columns take remaining width; only one should have flex.
 // ─────────────────────────────────────────────────────────────────────────────
 const DEFAULT_COLS = [
-  { key:'i',     label:'#',       width:52,  minWidth:36,  sortable:true,  visible:true  },
-  { key:'t',     label:'Time(s)', width:108, minWidth:70,  sortable:true,  visible:true  },
-  { key:'utc',   label:'UTC',     width:178, minWidth:140, sortable:true,  visible:true  },
-  { key:'id',    label:'Arb ID',  width:100, minWidth:60,  sortable:true,  visible:true  },
-  { key:'name',  label:'Name',    width:160, minWidth:80,  sortable:false, visible:false },
-  { key:'type',  label:'Type',    width:54,  minWidth:40,  sortable:true,  visible:true  },
-  { key:'dir',   label:'Dir',     width:48,  minWidth:36,  sortable:true,  visible:true  },
-  { key:'ch',    label:'Ch',      width:40,  minWidth:30,  sortable:true,  visible:true  },
-  { key:'dlc',   label:'DLC',     width:38,  minWidth:30,  sortable:true,  visible:true  },
-  { key:'flags', label:'Flags',   width:110, minWidth:60,  sortable:false, visible:true  },
-  { key:'data',  label:'Data',    width:0,   minWidth:120, sortable:false, visible:true, flex:true },
+  { key:'i',       label:'#',       width:52,  minWidth:36,  sortable:true,  visible:true  },
+  { key:'t',       label:'Time(s)', width:108, minWidth:70,  sortable:true,  visible:true  },
+  { key:'utc',     label:'UTC',     width:178, minWidth:140, sortable:true,  visible:true  },
+  { key:'id',      label:'Arb ID',  width:100, minWidth:60,  sortable:true,  visible:true  },
+  { key:'name',    label:'Name',    width:160, minWidth:80,  sortable:false, visible:false },
+  { key:'type',    label:'Type',    width:54,  minWidth:40,  sortable:true,  visible:true  },
+  { key:'dir',     label:'Dir',     width:48,  minWidth:36,  sortable:true,  visible:true  },
+  { key:'ch',      label:'Ch',      width:40,  minWidth:30,  sortable:true,  visible:true  },
+  { key:'dlc',     label:'DLC',     width:38,  minWidth:30,  sortable:true,  visible:true  },
+  { key:'flags',   label:'Flags',   width:110, minWidth:60,  sortable:false, visible:true  },
+  { key:'diagId',  label:'Diag ID', width:100, minWidth:60,  sortable:false, visible:false },
+  { key:'src',     label:'Src',     width:54,  minWidth:40,  sortable:false, visible:false },
+  { key:'dst',     label:'Dst',     width:54,  minWidth:40,  sortable:false, visible:false },
+  { key:'conn',    label:'Conn',    width:50,  minWidth:36,  sortable:false, visible:false },
+  { key:'service', label:'Service', width:160, minWidth:80,  sortable:false, visible:false },
+  { key:'data',    label:'Data',    width:0,   minWidth:120, sortable:false, visible:true, flex:true },
 ];
 
 // Working copy — mutated by reorder/resize/visibility toggles
@@ -880,7 +898,12 @@ function renderRow(div, m) {
 }
 
 function buildRowHTML(m) {
-  const tc = m.type==='ERR' ? 'b-err' : m.type==='FD' ? 'b-fd' : 'b-std';
+  let tc = 'b-std';
+  if (m.type === 'ERR' || m.type === 'neg') { tc = 'b-err'; }
+  else if (m.type === 'FD') { tc = 'b-fd'; }
+  else if (m.type === 'req') { tc = 'b-tx'; }
+  else if (m.type === 'pos') { tc = 'b-rx'; }
+
   const dc = m.dir==='RX'   ? 'b-rx'  : 'b-tx';
   let html = '';
 
@@ -892,19 +915,34 @@ function buildRowHTML(m) {
 
     let content;
     switch (col.key) {
-      case 'i':     content = '<span class="t-idx">'   + (m.i+1)    + '</span>'; break;
-      case 't':     content = '<span class="t-time">'  + m.t        + '</span>'; break;
-      case 'utc':   content = '<span class="t-time">'  + m.utc      + '</span>'; break;
-      case 'id':    content = '<span class="t-id">'    + esc(m.id)  + '</span>'; break;
-      case 'name':  content = m.msgName
-                      ? '<span style="color:var(--purple);font-weight:500">' + esc(m.msgName) + '</span>'
-                      : '<span style="color:var(--fg2);font-size:11px">—</span>'; break;
-      case 'type':  content = '<span class="badge ' + tc + '">'     + m.type + '</span>'; break;
-      case 'dir':   content = '<span class="badge ' + dc + '">'     + m.dir  + '</span>'; break;
-      case 'ch':    content = m.ch;  break;
-      case 'dlc':   content = m.dlc; break;
-      case 'data':  content = '<span class="t-data">'  + esc(m.data) + '</span>'; break;
-      case 'flags': content = renderFlags(m); break;
+      case 'i':       content = '<span class="t-idx">'   + (m.i+1)    + '</span>'; break;
+      case 't':       content = '<span class="t-time">'  + m.t        + '</span>'; break;
+      case 'utc':     content = '<span class="t-time">'  + m.utc      + '</span>'; break;
+      case 'id':      content = '<span class="t-id">'    + esc(m.id)  + '</span>'; break;
+      case 'name':    content = m.msgName
+                        ? '<span style="color:var(--purple);font-weight:500">' + esc(m.msgName) + '</span>'
+                        : '<span style="color:var(--fg2);font-size:11px">—</span>'; break;
+      case 'type':    content = '<span class="badge ' + tc + '">'     + m.type + '</span>'; break;
+      case 'dir':     content = '<span class="badge ' + dc + '">'     + m.dir  + '</span>'; break;
+      case 'ch':      content = m.ch;  break;
+      case 'dlc':     content = m.dlc; break;
+      case 'data':    content = '<span class="t-data">'  + esc(m.data) + '</span>'; break;
+      case 'flags':   content = renderFlags(m); break;
+      case 'diagId':  content = m.diagId
+                        ? '<span style="color:var(--yellow);font-weight:500">' + esc(m.diagId) + '</span>'
+                        : '<span style="color:var(--fg2);font-size:11px">—</span>'; break;
+      case 'src':     content = m.src
+                        ? '<span style="color:var(--blue)">' + esc(m.src) + '</span>'
+                        : '<span style="color:var(--fg2);font-size:11px">—</span>'; break;
+      case 'dst':     content = m.dst
+                        ? '<span style="color:var(--blue)">' + esc(m.dst) + '</span>'
+                        : '<span style="color:var(--fg2);font-size:11px">—</span>'; break;
+      case 'conn':    content = m.conn !== undefined
+                        ? '<span style="color:var(--fg2)">' + m.conn + '</span>'
+                        : '<span style="color:var(--fg2);font-size:11px">—</span>'; break;
+      case 'service': content = m.service
+                        ? '<span style="color:var(--purple);font-weight:500">' + esc(m.service) + '</span>'
+                        : '<span style="color:var(--fg2);font-size:11px">—</span>'; break;
       default:      content = '';
     }
     html += '<div class="cell" style="' + s + '">' + content + '</div>';
@@ -1256,22 +1294,32 @@ function showDetail(m) {
     dr('Channel',   m.ch) +
     dr('DLC',       m.dlc) +
     dr('Flags',     m.flags || '—') +
+    (m.diagId ? dr('Diag ID', '<span style="color:var(--yellow);font-weight:500">' + esc(m.diagId) + '</span>') : '') +
+    (m.service ? dr('Service', '<span style="color:var(--purple);font-weight:500">' + esc(m.service) + '</span>') : '') +
+    (m.src ? dr('Src', '<span style="color:var(--blue)">' + esc(m.src) + '</span>') : '') +
+    (m.dst ? dr('Dst', '<span style="color:var(--blue)">' + esc(m.dst) + '</span>') : '') +
+    (m.conn !== undefined ? dr('Conn', String(m.conn)) : '') +
     (color ? dr('Color', '<span style="text-transform:capitalize">' + color + '</span>') : '');
 
   if (bytes.length > 0) {
     html += '<div style="padding:8px 14px 4px;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--fg2)">Bytes</div>';
     html += '<div class="byte-idx-row">' + bytes.map((_,i) => '<span class="byte-idx">' + i + '</span>').join('') + '</div>';
-    html += '<div class="byte-row">'     + bytes.map(b   => '<div class="byte-cell">'   + b + '</div>').join('') + '</div>';
+    html += '<div class="byte-row">'     + bytes.map(b   => {
+      const isBracketed = b.startsWith('[') && b.endsWith(']');
+      const style = isBracketed ? 'font-size:10px;color:var(--fg2);width:32px;' : '';
+      return '<div class="byte-cell" style="' + style + '">' + b + '</div>';
+    }).join('') + '</div>';
     html += '<div style="padding:4px 14px 8px"><table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px">';
     html += '<tr>' + ['B','Hex','Dec','Bin'].map(h =>
       '<th style="color:var(--fg2);text-align:left;padding:2px 6px;font-size:10px">' + h + '</th>').join('') + '</tr>';
     bytes.forEach((b, i) => {
-      const d = parseInt(b, 16);
+      const cleanB = b.replace(/[\[\]]/g, '');
+      const d = parseInt(cleanB, 16);
       html += '<tr>' +
         '<td style="color:var(--fg2);padding:2px 6px">'  + i + '</td>' +
-        '<td style="color:#9cdcfe;padding:2px 6px">'     + b + '</td>' +
-        '<td style="padding:2px 6px">'                    + d + '</td>' +
-        '<td style="color:#b5cea8;padding:2px 6px;letter-spacing:.1em">' + d.toString(2).padStart(8,'0') + '</td>' +
+        '<td style="color:#9cdcfe;padding:2px 6px">'     + cleanB + '</td>' +
+        '<td style="padding:2px 6px">'                    + (isNaN(d) ? '—' : d) + '</td>' +
+        '<td style="color:#b5cea8;padding:2px 6px;letter-spacing:.1em">' + (isNaN(d) ? '—' : d.toString(2).padStart(8,'0')) + '</td>' +
         '</tr>';
     });
     html += '</table></div>';
@@ -1547,6 +1595,14 @@ document.getElementById('btnClearDbc').addEventListener('click', () => {
   vscode.postMessage({ type: 'clearDbc' });
 });
 
+document.getElementById('btnImportCdd')?.addEventListener('click', () => {
+  vscode.postMessage({ type: 'openCddFile' });
+});
+
+document.getElementById('btnClearCdd')?.addEventListener('click', () => {
+  vscode.postMessage({ type: 'clearCdd' });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SCROLL LISTENER
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1713,6 +1769,46 @@ window.addEventListener('message', ({ data: msg }) => {
     // Hide the Name column
     const nameCol = cols.find(c => c.key === 'name');
     if (nameCol) { nameCol.visible = false; }
+    buildHeader();
+
+    resetAndRefetch();
+  }
+
+  // ── cddLoaded ─────────────────────────────────────────────────────────────
+  else if (msg.type === 'cddLoaded') {
+    const badge    = document.getElementById('cddBadge');
+    const clearBtn = document.getElementById('btnClearCdd');
+    const suffix   = msg.active ? '' : '  — inactive';
+    if (badge)    { badge.textContent = msg.fileName + '  (' + msg.serviceCount + ' services)' + suffix; badge.style.display = 'inline-flex'; }
+    if (clearBtn) { clearBtn.style.display = 'inline-flex'; }
+
+    if (msg.active) {
+      // Automatically show diagnostic columns only when reconstruction actually ran
+      ['diagId', 'src', 'dst', 'conn', 'service'].forEach(key => {
+        const col = cols.find(c => c.key === key);
+        if (col) { col.visible = true; }
+      });
+      buildHeader();
+      showToast('CDD loaded: ' + msg.fileName);
+    } else {
+      showToast('CDD loaded but no Request/Response CAN-ID found — diagnostics inactive');
+    }
+
+    resetAndRefetch();
+  }
+
+  // ── cddCleared ────────────────────────────────────────────────────────────
+  else if (msg.type === 'cddCleared') {
+    const badge    = document.getElementById('cddBadge');
+    const clearBtn = document.getElementById('btnClearCdd');
+    if (badge)    { badge.style.display = 'none'; }
+    if (clearBtn) { clearBtn.style.display = 'none'; }
+
+    // Automatically hide diagnostic columns
+    ['diagId', 'src', 'dst', 'conn', 'service'].forEach(key => {
+      const col = cols.find(c => c.key === key);
+      if (col) { col.visible = false; }
+    });
     buildHeader();
 
     resetAndRefetch();

@@ -52,6 +52,9 @@ interface ObjHeaderBase {
   objectType: number;
 }
 
+// ISO 15765-2 transport-frame classification ('' = not a recognised TP frame).
+export type TpFrameType = '' | 'SF' | 'FF' | 'CF' | 'FC.CTS' | 'FC.WT' | 'FC.OVFLW' | 'TP';
+
 export interface CANMessage {
   // Relative timestamp from start of recording in seconds
   relativeTimestamp: number;
@@ -68,6 +71,18 @@ export interface CANMessage {
   isFd?: boolean;
   bitrateSwitch?: boolean;
   errorStateIndicator?: boolean;
+  // UDS diagnostics columns
+  isUds?: boolean;
+  udsType?: 'req' | 'pos' | 'neg';
+  diagId?: string;
+  name?: string;
+  service?: string;
+  src?: string;
+  dst?: string;
+  conn?: number;
+  isOtp?: boolean;
+  otpType?: TpFrameType;
+  formattedData?: string;
 }
 
 // Binary parsing utilities

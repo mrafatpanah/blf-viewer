@@ -2,6 +2,19 @@
 
 All notable changes to the **BLF Viewer** extension are documented here.
 
+## [1.3.0] — 2026-07-10
+
+### Added
+
+- **CDD (Vector CANdela Studio) diagnostic database import** — new **⊕ CDD** toolbar button imports a `.cdd` file (10 MB limit). Extracts the Request/Response CAN-ID pair and the service catalogue (SID, sub-function/DID, positive-response SID) so diagnostic traffic can be labelled by name instead of raw bytes. **✕** clears the loaded CDD and reverts to raw CAN rows.
+- **Stateful ISO 15765-2 (CAN-TP) transport reconstruction** — when a CDD's Request/Response CAN-ID pair is found, matching CAN traffic is reassembled per ISO 15765-2: Single Frame, First Frame + Consecutive Frame (with sequence-number validation and the CAN-FD length escape), and Flow Control (CTS / WT / OVFLW) are recognized and shown as raw transport rows (`SF`/`FF`/`CF`/`FC.*`), with completed multi-frame messages emitted as a second, fully-reassembled UDS row. Reassembly state is tracked per channel and per direction, so concurrent sessions on different channels don't collide.
+- **UDS diagnostics columns** — new **Diag ID**, **Src**, **Dst**, **Conn**, and **Service** columns (auto-shown when a CDD is active) surface the matched service name, request/positive/negative classification (`req`/`pos`/`neg` row types with distinct badge colors), the resolved NRC name for negative responses (e.g. `requestOutOfRange`), and a per-connection grouping index.
+- **CDD-aware detail panel** — the row detail panel shows Diag ID / Service / Src / Dst / Conn for diagnostic rows, and renders transport padding bytes (`[AA BB]`) distinctly from real payload bytes in the byte table.
+
+### Fixed
+
+- **Regex-injection / ReDoS hardening in the CDD parser** — attribute values read from an untrusted `.cdd` file are escaped before being interpolated into a `RegExp`, preventing catastrophic backtracking from a crafted attribute value.
+
 ## [1.2.0] — 2026-06-10
 
 ### Added

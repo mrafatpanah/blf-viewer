@@ -2,9 +2,10 @@
 // Pure functions — no VS Code or webview dependencies.
 // Imported by blfViewProvider.ts.
 
-import { CANMessage } from './blf-parser';
+import { CANMessage, TpFrameType } from './blf-parser';
 import { DbcDatabase, decodeSignal } from './dbc-parser';
 import { FilterState, SortState, WireMessage, WireSignal } from './blf-types';
+import { CddDatabase } from './cdd-parser';
 
 // ── Filter ────────────────────────────────────────────────────────────────────
 
@@ -210,7 +211,7 @@ export function toWire(m: CANMessage, idx: number, dbc?: DbcDatabase | null): Wi
   let msgName: string | undefined;
   let signals: WireSignal[] | undefined;
 
-  if (dbc) {
+  if (dbc && !m.isUds && !m.isOtp) {
     const dbcMsg = dbc.messages.get(m.arbitrationId);
     if (dbcMsg) {
       msgName = dbcMsg.name;
@@ -233,6 +234,22 @@ export function toWire(m: CANMessage, idx: number, dbc?: DbcDatabase | null): Wi
     }
   }
 
+  // Handle data byte formatting
+  let dataStr = '';
+  if (m.isOtp && m.formattedData !== undefined) {
+    dataStr = m.formattedData;
+  } else {
+    dataStr = Buffer.from(m.data).toString('hex').match(/.{1,2}/g)?.join(' ').toUpperCase() ?? '';
+  }
+
+  // Determine wire type
+  let wireType: WireMessage['type'] = m.isErrorFrame ? 'ERR' : m.isFd ? 'FD' : 'STD';
+  if (m.isUds && m.udsType) {
+    wireType = m.udsType;
+  } else if (m.isOtp && m.otpType) {
+    wireType = m.otpType as any;
+  }
+
   return {
     i:     idx,
     t:     m.relativeTimestamp.toFixed(7),
@@ -241,18 +258,322 @@ export function toWire(m: CANMessage, idx: number, dbc?: DbcDatabase | null): Wi
              ? '0x' + m.arbitrationId.toString(16).padStart(8, '0').toUpperCase()
              : m.arbitrationId.toString(16).padStart(3, '0').toUpperCase(),
     rawId: m.arbitrationId,
-    type:  m.isErrorFrame ? 'ERR' : m.isFd ? 'FD' : 'STD',
+    type:  wireType,
     dir:   m.isRx ? 'RX' : 'TX',
     ch:    m.channel,
     dlc:   m.dlc,
-    data:  Buffer.from(m.data).toString('hex').match(/.{1,2}/g)?.join(' ').toUpperCase() ?? '',
+    data:  dataStr,
     flags: flagsList.join(' '),
     ext:   m.isExtendedId,
     rtr:   m.isRemoteFrame,
     brs:   m.bitrateSwitch       ?? false,
     esi:   m.errorStateIndicator ?? false,
     err:   m.isErrorFrame        ?? false,
-    msgName,
-    signals,
+    msgName: m.isUds ? m.name : (m.isOtp ? m.name : msgName),
+    signals: m.isUds ? undefined : signals,
+    // Diagnostics properties
+    diagId:  m.diagId,
+    src:     m.src,
+    dst:     m.dst,
+    conn:    m.conn,
+    service: m.service,
+    isUds:   m.isUds
   };
+}
+
+// ── UDS Diagnostics Reconstructor ─────────────────────────────────────────────
+
+const UDS_NRCS: { [nrc: number]: string } = {
+  0x10: 'generalReject',
+  0x11: 'serviceNotSupported',
+  0x12: 'subFunctionNotSupported',
+  0x13: 'incorrectMessageLengthOrInvalidFormat',
+  0x21: 'busyRepeatRequest',
+  0x22: 'conditionsNotCorrect',
+  0x24: 'requestSequenceError',
+  0x31: 'requestOutOfRange',
+  0x33: 'securityAccessDenied',
+  0x35: 'invalidKey',
+  0x36: 'exceededNumberOfAttempts',
+  0x37: 'requiredTimeDelayNotExpired',
+  0x78: 'requestCorrectlyReceived-ResponsePending'
+};
+
+// Per channel+direction ISO-TP reassembly stream.
+interface TpStream {
+  buffer:     Buffer;
+  targetLen:  number;
+  active:     boolean;
+  expectedSN: number; // next expected Consecutive Frame sequence number (0–15, wraps)
+}
+
+// Result of classifying one CAN frame against ISO 15765-2.
+export interface FrameInfo {
+  otpType:      TpFrameType;    // 'SF' | 'FF' | 'CF' | 'FC.*' | 'TP' | ''
+  completedUds?: CANMessage;   // present when a full UDS message reassembled on this frame
+  pciLen:       number;        // count of PCI bytes at frame start
+  payloadLen:   number;        // count of real UDS payload bytes carried by THIS frame
+  snError?:     boolean;       // CF arrived with unexpected sequence number / no active FF
+}
+
+export class UdsReconstructor {
+  private reqCanId: number;
+  private resCanId: number;
+  // Reassembly streams keyed by `${channel}:${dir}` so concurrent buses / directions don't collide.
+  private streams = new Map<string, TpStream>();
+
+  constructor(reqCanId: number, resCanId: number) {
+    this.reqCanId = reqCanId;
+    this.resCanId = resCanId;
+  }
+
+  private streamFor(channel: number, dir: 'req' | 'res'): TpStream {
+    const key = channel + ':' + dir;
+    let s = this.streams.get(key);
+    if (!s) {
+      s = { buffer: Buffer.alloc(0), targetLen: 0, active: false, expectedSN: 1 };
+      this.streams.set(key, s);
+    }
+    return s;
+  }
+
+  processMessage(m: CANMessage): FrameInfo {
+    const isReq = m.arbitrationId === this.reqCanId;
+    const isRes = m.arbitrationId === this.resCanId;
+
+    if (!isReq && !isRes) { return { otpType: '', pciLen: 0, payloadLen: 0 }; }
+
+    const data = Buffer.from(m.data);
+    if (data.length === 0) { return { otpType: '', pciLen: 0, payloadLen: 0 }; }
+
+    const dir: 'req' | 'res' = isReq ? 'req' : 'res';
+    const stream  = this.streamFor(m.channel, dir);
+    const pciType = (data[0] >> 4) & 0x0F;
+
+    const complete = (payload: Buffer, udsType: 'req' | 'pos' | 'neg'): CANMessage => ({
+      relativeTimestamp: m.relativeTimestamp,
+      absoluteTimestamp: m.absoluteTimestamp,
+      arbitrationId:     m.arbitrationId,
+      isExtendedId:      m.isExtendedId,
+      isRemoteFrame:     m.isRemoteFrame,
+      isRx:              m.isRx,
+      dlc:               payload.length,
+      data:              payload,
+      channel:           m.channel,
+      isUds:             true,
+      udsType
+    });
+
+    if (pciType === 0) { // Single Frame — interrupts any pending multi-frame on this stream
+      stream.active = false;
+      let len    = data[0] & 0x0F;
+      let pciLen = 1;
+      // CAN-FD SF escape (real length in byte 1) is only valid for FD frames; a classic
+      // padded frame whose first byte is 0x00 must NOT be reinterpreted as an escaped SF.
+      if (len === 0 && (m.isFd || data.length > 8)) {
+        len    = data[1];
+        pciLen = 2;
+      }
+      const payload = data.slice(pciLen, pciLen + len);
+      // A zero-length SF carries no UDS service — emit the raw frame only.
+      if (payload.length === 0) {
+        return { otpType: 'SF', pciLen, payloadLen: 0 };
+      }
+      const udsType = isReq ? 'req' : (payload[0] === 0x7F ? 'neg' : 'pos');
+      return { otpType: 'SF', completedUds: complete(payload, udsType), pciLen, payloadLen: payload.length };
+    }
+
+    if (pciType === 1) { // First Frame
+      let len    = ((data[0] & 0x0F) << 8) | data[1];
+      let pciLen = 2;
+      if (len === 0 && data.length >= 6) { // FF_DL escape: 32-bit length in bytes 2..5
+        len    = data.readUInt32BE(2);
+        pciLen = 6;
+      }
+      const payload = data.slice(pciLen);
+      stream.buffer     = payload;
+      stream.targetLen  = len;
+      stream.active     = true;
+      stream.expectedSN = 1;
+      return { otpType: 'FF', pciLen, payloadLen: payload.length };
+    }
+
+    if (pciType === 2) { // Consecutive Frame
+      const sn = data[0] & 0x0F;
+      if (!stream.active) {
+        // Orphan CF: FF lost or log started mid-transfer — cannot reassemble.
+        return { otpType: 'CF', pciLen: 1, payloadLen: Math.max(0, data.length - 1), snError: true };
+      }
+      if (sn !== stream.expectedSN) {
+        // Sequence break: abort reassembly rather than silently concatenate garbage.
+        stream.active    = false;
+        stream.buffer    = Buffer.alloc(0);
+        stream.targetLen = 0;
+        return { otpType: 'CF', pciLen: 1, payloadLen: Math.max(0, data.length - 1), snError: true };
+      }
+      const remaining = stream.targetLen - stream.buffer.length;
+      const realLen   = Math.max(0, Math.min(data.length - 1, remaining));
+      stream.buffer     = Buffer.concat([stream.buffer, data.slice(1)]);
+      stream.expectedSN = (stream.expectedSN + 1) & 0x0F;
+      if (stream.buffer.length >= stream.targetLen) {
+        const payload = stream.buffer.slice(0, stream.targetLen);
+        stream.active    = false;
+        stream.buffer    = Buffer.alloc(0);
+        stream.targetLen = 0;
+        const udsType: 'req' | 'pos' | 'neg' = isReq ? 'req' : (payload[0] === 0x7F ? 'neg' : 'pos');
+        return { otpType: 'CF', completedUds: complete(payload, udsType), pciLen: 1, payloadLen: realLen };
+      }
+      return { otpType: 'CF', pciLen: 1, payloadLen: realLen };
+    }
+
+    if (pciType === 3) { // Flow Control
+      const fs = data[0] & 0x0F;
+      let otpType: TpFrameType = 'FC.CTS';
+      if (fs === 1) { otpType = 'FC.WT'; }
+      else if (fs === 2) { otpType = 'FC.OVFLW'; }
+      return { otpType, pciLen: Math.min(3, data.length), payloadLen: 0 };
+    }
+
+    return { otpType: 'TP', pciLen: 0, payloadLen: 0 };
+  }
+}
+
+// 2-digit uppercase hex of a single byte.
+function hex2(b: number): string {
+  return b.toString(16).toUpperCase().padStart(2, '0');
+}
+
+// Space-separated uppercase hex of a buffer ("AA BB CC").
+function toHexBytes(buf: Buffer): string {
+  return buf.toString('hex').toUpperCase().match(/.{1,2}/g)?.join(' ') || '';
+}
+
+// CAN arbitration ID as uppercase hex (min 3 chars, e.g. "782").
+function canIdHex(id: number): string {
+  return id.toString(16).toUpperCase().padStart(3, '0');
+}
+
+// Render a raw TP frame with PCI in [..], real payload bare, padding in [..].
+function formatTpFrame(data: Buffer, pciLen: number, payloadLen: number, otpType: string): string {
+  const buf = Buffer.from(data);
+  if (!otpType || pciLen <= 0) { return toHexBytes(buf); }
+  const pci     = toHexBytes(buf.slice(0, pciLen));
+  const payload = toHexBytes(buf.slice(pciLen, pciLen + payloadLen));
+  const pad     = toHexBytes(buf.slice(pciLen + payloadLen));
+  return `[${pci}]` + (payload ? ' ' + payload : '') + (pad ? ' [' + pad + ']' : '');
+}
+
+// Annotate a reassembled UDS message with name / service / diagId from the CDD (or fallbacks).
+function annotateUds(uds: CANMessage, cddDb?: CddDatabase | null): void {
+  const payload = uds.data;
+  let name = '';
+  let service = '';
+  let diagId = '';
+
+  // A reassembled UDS message can be malformed/truncated (e.g. a 1-byte SF carrying just 0x7F).
+  // Guard every byte access so a short payload labels gracefully instead of throwing.
+  if (payload.length === 0) {
+    uds.name    = `UDS(empty)::${uds.udsType}`;
+    uds.service = 'UDS';
+    uds.diagId  = '';
+    return;
+  }
+
+  if (uds.udsType === 'neg') {
+    if (payload.length < 3) {
+      uds.name    = 'NegativeResponse(malformed)';
+      uds.service = 'NegativeResponse';
+      uds.diagId  = toHexBytes(payload);
+      return;
+    }
+    const rejectedSid = payload[1];
+    const nrc         = payload[2];
+    const nrcName     = UDS_NRCS[nrc] || `NRC_0x${nrc.toString(16).toUpperCase()}`;
+    diagId = `7F ${hex2(rejectedSid)} ${hex2(nrc)}`;
+
+    let matchedService = '';
+    if (cddDb) {
+      const sidKey = hex2(rejectedSid);
+      for (const [key, value] of cddDb.services.entries()) {
+        if (key.startsWith(sidKey)) {
+          matchedService = value.service;
+          break;
+        }
+      }
+    }
+    service = matchedService || `SID_0x${rejectedSid.toString(16).toUpperCase()}`;
+    name    = `${service}::neg(${nrcName})`;
+  } else {
+    const key3 = toHexBytes(payload.slice(0, 3));
+    const key2 = toHexBytes(payload.slice(0, 2));
+    const key1 = toHexBytes(payload.slice(0, 1));
+
+    const found = cddDb ? (cddDb.services.get(key3) || cddDb.services.get(key2) || cddDb.services.get(key1)) : null;
+    if (found) {
+      name    = found.name;
+      service = found.service;
+      if (found.paramType === 'did') { diagId = key3; }
+      else if (found.paramType === 'sub') { diagId = key2; }
+      else { diagId = key1; }
+    } else {
+      diagId  = key2 || key1;
+      name    = `UDS_SID_0x${payload[0].toString(16).toUpperCase()}::${uds.udsType}`;
+      service = `SID_0x${payload[0].toString(16).toUpperCase()}`;
+    }
+  }
+
+  uds.name    = name;
+  uds.service = service;
+  uds.diagId  = diagId;
+}
+
+export function reconstructUdsMessages(
+  messages: CANMessage[],
+  reqCanId: number,
+  resCanId: number,
+  cddDb?: CddDatabase | null
+): CANMessage[] {
+  const reconstructor = new UdsReconstructor(reqCanId, resCanId);
+  const result: CANMessage[] = [];
+  let connCounter = 1;
+  const activeConnMap = new Map<number, number>(); // channel → current connection index
+
+  const reqHex = canIdHex(reqCanId);
+  const resHex = canIdHex(resCanId);
+
+  for (const m of messages) {
+    const isDiag = m.arbitrationId === reqCanId || m.arbitrationId === resCanId;
+    if (!isDiag) {
+      result.push(m);
+      continue;
+    }
+
+    const { otpType, completedUds, pciLen, payloadLen } = reconstructor.processMessage(m);
+    const formattedData = formatTpFrame(m.data, pciLen, payloadLen, otpType);
+
+    // Connection index, tracked per channel.
+    let conn = activeConnMap.get(m.channel);
+    if (conn === undefined) {
+      conn = connCounter++;
+      activeConnMap.set(m.channel, conn);
+    }
+
+    result.push({ ...m, isOtp: true, otpType, formattedData, conn, name: '<OTP>' });
+
+    if (completedUds) {
+      completedUds.conn = conn;
+      activeConnMap.set(m.channel, connCounter++); // next frame on this channel starts a new connection
+
+      annotateUds(completedUds, cddDb);
+      // src = sender's CAN ID, dst = receiver's CAN ID. Keyed on arbitrationId (authoritative),
+      // not isRx — a response can be TX when the log is captured from the ECU/gateway side.
+      const isResponse = completedUds.arbitrationId === resCanId;
+      completedUds.src = isResponse ? resHex : reqHex;
+      completedUds.dst = isResponse ? reqHex : resHex;
+
+      result.push(completedUds);
+    }
+  }
+
+  return result;
 }

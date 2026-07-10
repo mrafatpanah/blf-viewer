@@ -19,7 +19,9 @@ export type WebviewMessage =
   | { type: 'requestPage'; startIndex: number; count: number; filter: FilterState; sort: SortState; }
   | { type: 'searchFirst'; filter: FilterState; sort: SortState; search: FilterState; fromIndex?: number; direction?: 'forward' | 'backward'; }
   | { type: 'openDbcFile' }
-  | { type: 'clearDbc' };
+  | { type: 'clearDbc' }
+  | { type: 'openCddFile' }
+  | { type: 'clearCdd' };
 
 // Decoded signal value from a DBC database
 export interface WireSignal {
@@ -39,11 +41,11 @@ export interface WireMessage {
   utc:      string;           // formatted absolute UTC timestamp
   id:       string;           // formatted arb ID string  e.g. "0x1A2B3C4D"
   rawId:    number;           // raw integer arb ID (for sorting / filter by same ID)
-  type:     'STD' | 'FD' | 'ERR';
+  type:     'STD' | 'FD' | 'ERR' | 'req' | 'pos' | 'neg' | 'SF' | 'FF' | 'CF' | 'FC.CTS' | 'FC.WT' | 'FC.OVFLW' | 'TP';
   dir:      'RX' | 'TX';
   ch:       number;
   dlc:      number;
-  data:     string;           // "AA BB CC DD"
+  data:     string;           // "AA BB CC DD" or formatted diagnostics data
   flags:    string;           // "EXT RTR BRS ESI" — space-separated active flags
   ext:      boolean;
   rtr:      boolean;
@@ -52,6 +54,13 @@ export interface WireMessage {
   err:      boolean;
   msgName?: string;           // DBC message name, undefined when no DBC or no match
   signals?: WireSignal[];     // undefined = no DBC loaded; [] = DBC match with no signals
+  // UDS diagnostics columns
+  diagId?:  string;
+  src?:     string;
+  dst?:     string;
+  conn?:    number;
+  service?: string;
+  isUds?:   boolean;
 }
 
 // Messages sent from host → webview
@@ -93,4 +102,13 @@ export type HostMessage =
     }
   | {
       type: 'dbcCleared';
+    }
+  | {
+      type:         'cddLoaded';
+      fileName:     string;
+      serviceCount: number;
+      active:       boolean;  // false when no Request/Response CAN-ID found → no UDS reconstruction
+    }
+  | {
+      type: 'cddCleared';
     };
