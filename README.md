@@ -35,6 +35,17 @@ Click the **⊕ DBC** button in the toolbar to import a `.dbc` file. Once loaded
 - Selecting a matched row shows a **Signals** section in the detail panel with each signal's raw hex value, physical value (with unit), and value-table label for enum signals (e.g. `Drive`, `Park`)
 - Click **✕** next to the badge to unload the DBC and return to raw data
 
+### UDS diagnostics decoding (CDD import)
+
+Click the **⊕ CDD** button in the toolbar to import a Vector CANdela Studio (`.cdd`) diagnostic database (10 MB limit). Once loaded:
+
+- A badge shows the file name and the number of matched services
+- If the CDD's Request/Response CAN-ID pair is found, matching CAN traffic is reassembled per **ISO 15765-2 (CAN-TP)**: Single Frame, First Frame + Consecutive Frame (with sequence-number validation), and Flow Control are shown as raw transport rows (`SF` / `FF` / `CF` / `FC.CTS` / `FC.WT` / `FC.OVFLW`), padding bytes shown in `[brackets]`
+- Every completed multi-frame or single-frame UDS message is also shown as its own reassembled row, colored by outcome: **req** (request), **pos** (positive response), **neg** (negative response, labelled with the resolved NRC name, e.g. `requestOutOfRange`)
+- New **Diag ID**, **Src**, **Dst**, **Conn**, and **Service** columns (auto-shown when a CDD is active) surface the matched service name and connection grouping
+- If the CDD has no Request/Response CAN-ID declared, the badge shows "inactive" and the raw CAN-TP traffic is still parsed but no service names are resolved
+- Click **✕** next to the badge to unload the CDD and return to raw CAN rows
+
 ### Filter and search panels
 
 The viewer has separate **Filter** and **Search** panels so you can either reduce the visible dataset or jump to a matching frame without changing what is displayed.
@@ -178,6 +189,10 @@ This extension does not contribute any configurable settings.
 ---
 
 ## Release Notes
+
+### 1.3.0
+
+CDD (Vector CANdela Studio) diagnostic database import, stateful ISO 15765-2 (CAN-TP) transport reconstruction, and UDS diagnostics columns (Diag ID, Src, Dst, Conn, Service) with request/positive/negative response labelling and NRC name resolution.
 
 ### 1.2.0
 

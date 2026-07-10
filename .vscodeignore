@@ -17,3 +17,5 @@ docs/**
 .claude/**
 CLAUDE.md
 .markdownlint.json
+coverage/**
+.nyc_output/**

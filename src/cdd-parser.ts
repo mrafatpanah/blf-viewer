@@ -17,6 +17,12 @@ export interface CddDatabase {
   services: Map<string, CddService>; // key: "10 01", "22 F1 8C"
 }
 
+// Escapes regex metacharacters so untrusted CDD attribute values can be safely
+// interpolated into `new RegExp(...)` without risking regex injection / ReDoS.
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export function parseCddFile(text: string, fileName: string): CddDatabase {
   const db: CddDatabase = {
     fileName,
@@ -33,14 +39,14 @@ export function parseCddFile(text: string, fileName: string): CddDatabase {
   const resAttrId = resIdDefMatch ? resIdDefMatch[1] : null;
 
   if (reqAttrId) {
-    const unsMatch = text.match(new RegExp(`<UNS\\s+[^>]*attrref='${reqAttrId}'[^>]*>`, 'i'));
+    const unsMatch = text.match(new RegExp(`<UNS\\s+[^>]*attrref='${escapeRegExp(reqAttrId)}'[^>]*>`, 'i'));
     if (unsMatch) {
       const vMatch = unsMatch[0].match(/v='(\d+)'/i);
       if (vMatch) { db.requestCanId = parseInt(vMatch[1], 10); }
     }
   }
   if (resAttrId) {
-    const unsMatch = text.match(new RegExp(`<UNS\\s+[^>]*attrref='${resAttrId}'[^>]*>`, 'i'));
+    const unsMatch = text.match(new RegExp(`<UNS\\s+[^>]*attrref='${escapeRegExp(resAttrId)}'[^>]*>`, 'i'));
     if (unsMatch) {
       const vMatch = unsMatch[0].match(/v='(\d+)'/i);
       if (vMatch) { db.responseCanId = parseInt(vMatch[1], 10); }

@@ -78,6 +78,23 @@ suite('cdd-parser', () => {
     assert.strictEqual(posService.type, 'pos');
     assert.strictEqual(posService.sid, 0x50);
   });
+
+  test('regex-metacharacter UNSDEF id does not throw or hang (regex-injection guard)', () => {
+    // A malicious/malformed CDD could carry regex metacharacters in the id attribute;
+    // parseCddFile must treat it as a literal string, not inject it into a RegExp unescaped.
+    const evilXml = `<?xml version='1.0'?>
+<CANDELA><ECUDOC>
+<UNSDEF id='(a+)+evil$' oid='X' attrcatref='Y' usage='sys' v='1' df='hex'>
+<NAME><TUV xml:lang='en-US'>Request CAN-ID</TUV></NAME>
+</UNSDEF>
+<UNS oid='Z' attrref='(a+)+evil$' v='1922'/>
+</ECUDOC></CANDELA>`;
+    const start = Date.now();
+    const db = parseCddFile(evilXml, 'evil.cdd');
+    const elapsedMs = Date.now() - start;
+    assert.ok(elapsedMs < 1000, `parseCddFile took ${elapsedMs}ms — possible ReDoS via unescaped regex interpolation`);
+    assert.strictEqual(db.requestCanId, 1922); // literal match still succeeds
+  });
 });
 
 function createMsgCh(id: number, data: number[], channel: number): CANMessage {

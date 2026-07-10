@@ -16,6 +16,11 @@ graph TD
         B -->|Holds| G[("CANMessage[] Array")]
         B -->|Imports/Parses| D[DbcParser]
         D -->|Holds| E[("DbcDatabase / Signals")]
+        B -->|Imports/Parses| M[CddParser]
+        M -->|Holds| N[("CddDatabase / Services")]
+        B -->|"Reconstructs (CAN-TP)"| O[UdsReconstructor]
+        O -->|Consumes| N
+        O -->|"Rebuilds"| G
         B -->|Processes Queries| F[blf-host.ts]
         F -->|Applies filters & sorts| G
         F -->|Converts slice to wires| H[("WireMessage[] Payload")]
@@ -38,6 +43,7 @@ graph TD
     style H fill:#27ae60,stroke:#2ecc71,color:#fff
     style L fill:#2c3e50,stroke:#34495e,color:#fff
     style K fill:#d35400,stroke:#e67e22,color:#fff
+    style N fill:#2c3e50,stroke:#34495e,color:#fff
 ```
 
 ### Module Responsibilities
@@ -49,6 +55,8 @@ graph TD
 | [`blf-parser.ts`](file:///home/marifat/personal/vscode-blf-reader/blf-viewer/src/blf-parser.ts) | Parsing / Parser | Implements `BLFReader`, which parses binary structure, extracts headers, handles zlib decompression, and maps log packages to internal `CANMessage` structs. |
 | [`blf-host.ts`](file:///home/marifat/personal/vscode-blf-reader/blf-viewer/src/blf-host.ts) | Backend Query Engine | Pure functions for sorting, filtering, matching, and converting `CANMessage` slices to lightweight `WireMessage` rows. |
 | [`dbc-parser.ts`](file:///home/marifat/personal/vscode-blf-reader/blf-viewer/src/dbc-parser.ts) | Database Engine | Parses Vector CAN database (`.dbc`) files and decodes raw CAN payloads using signal attributes (Intel/Motorola byte orders, bit masks, scale/offset). |
+| [`cdd-parser.ts`](file:///home/marifat/personal/vscode-blf-reader/blf-viewer/src/cdd-parser.ts) | Database Engine | Regex-based parser for Vector CANdela Studio (`.cdd`) diagnostic databases. Extracts the Request/Response CAN-ID pair and a service catalogue (SID, sub-function/DID, positive-response SID) keyed by request-byte-sequence. |
+| [`blf-host.ts`](file:///home/marifat/personal/vscode-blf-reader/blf-viewer/src/blf-host.ts) *(`UdsReconstructor`)* | Protocol Engine | Stateful ISO 15765-2 (CAN-TP) reassembler. Tracks Single/First/Consecutive/Flow-Control frames per `channel:direction` stream, validates Consecutive-Frame sequence numbers, and emits completed UDS messages annotated from the `CddDatabase`. |
 | [`blf-types.ts`](file:///home/marifat/personal/vscode-blf-reader/blf-viewer/src/blf-types.ts) | Interfaces / Types | Defines strict type definitions for the Webview↔Host protocol (`WebviewMessage`, `HostMessage`, `WireMessage`, `WireSignal`). |
 | [`blf-webview.ts`](file:///home/marifat/personal/vscode-blf-reader/blf-viewer/src/blf-webview.ts) | Frontend UI | Houses the template string for HTML/CSS and the fully client-side JavaScript runtime (Virtual Scroller, Page Cache, details viewer, column configuration). |
 
@@ -177,6 +185,50 @@ sequenceDiagram
     Parser-->>Host: Returns WireSignal[] (physStr, rawHex, valueLabel)
     Host-->>View: Send WireMessages carrying names and signals
     note over View: Inspections panel displays detailed signal telemetry
+```
+
+### 2.5 CDD Import & UDS/CAN-TP Reconstruction Flow
+
+Unlike DBC decoding (which annotates existing rows in place), a CDD import can **rebuild the entire message array**: CAN-TP transport frames on the Request/Response CAN-ID pair are expanded into raw transport rows plus synthesized, fully-reassembled UDS rows.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant View as Webview Panel
+    participant Host as BLFViewProvider
+    participant CddP as cdd-parser.ts
+    participant Recon as UdsReconstructor (blf-host.ts)
+
+    User->>View: Clicks "⊕ CDD" button
+    View->>Host: postMessage("openCddFile")
+    Host->>Host: Show File Dialog (.cdd, 10 MB limit)
+    User->>Host: Selects file
+    Host->>CddP: parseCddFile(text, name)
+    CddP->>CddP: Extract Request/Response CAN-ID via UNSDEF/UNS regex
+    CddP->>CddP: Extract PROTOCOLSERVICE + DIAGINST → service catalogue
+    CddP-->>Host: Returns CddDatabase (CAN IDs + services Map)
+    alt Request & Response CAN-ID both found
+        Host->>Recon: reconstructUdsMessages(originalMessages, reqId, resId, cddDb)
+        loop for each CAN frame on reqId / resId
+            Recon->>Recon: processMessage() — classify PCI (SF/FF/CF/FC)
+            Recon->>Recon: Validate CF sequence number per channel:direction stream
+            alt Frame completes a UDS message
+                Recon->>Recon: annotateUds() — resolve service name / NRC from CddDatabase
+                Recon-->>Host: Emit raw OTP row + reassembled UDS row
+            else Frame is mid-transfer
+                Recon-->>Host: Emit raw OTP row only
+            end
+        end
+        Host->>Host: processedMessages = reconstructed array
+    else No CAN-ID pair found
+        Host->>Host: processedMessages = originalMessages (unchanged)
+        note over Host: "active: false" — CDD loaded but reconstruction inactive
+    end
+    Host->>View: postMessage("cddLoaded", { fileName, serviceCount, active })
+    note over View: Badge shows file + service count.<br/>If active, Diag ID/Src/Dst/Conn/Service columns auto-shown.
+    View->>Host: postMessage("requestPage", { pageStart: 0, ... })
+    Host-->>View: postMessage("page", ...) — rows now include OTP + UDS types
 ```
 
 ---
@@ -327,3 +379,40 @@ To keep layout rendering smooth, the scroller performs the following steps:
 2.  **Overscan Buffer**: Rows are rendered from `firstVisible - OVERSCAN` to `lastVisible + OVERSCAN`.
 3.  **Element Recycling**: A set of `row` divs are cached in `rowPool`. On scrolling, their properties (`style.top`, text content, classes) are modified in-place instead of recreating nodes.
 4.  **Flexible Column Sizing**: Calculated dynamically based on user drag interactions. Settings are saved to `localStorage` (e.g., `blf.filterIdWidth`).
+
+---
+
+## 6. UDS / ISO 15765-2 (CAN-TP) Reconstruction Engine (`cdd-parser.ts` + `blf-host.ts`)
+
+Vector CANdela Studio (`.cdd`) files describe a diagnostic ECU's service catalogue. Combined with the ISO 15765-2 transport-layer reassembler in `blf-host.ts`, raw multi-frame CAN traffic on the diagnostic CAN-ID pair is turned into named UDS request/response messages.
+
+### 6.1 CDD Parsing (`cdd-parser.ts`)
+
+`parseCddFile` is a **regex-based** parser (no XML DOM dependency, matching the "pure TypeScript, no runtime dependencies" constraint used throughout this extension):
+
+1.  **Request/Response CAN-ID** — found via a two-step lookup: `<UNSDEF id='X'>` elements are matched by their `<NAME>` text (`"Request CAN-ID"` / `"Response CAN-ID"`) to find the attribute-definition id, then a `<UNS attrref='X' v='...'>` element carrying that id's numeric value is located. CDD attribute values observed in practice are decimal despite `df='hex'` on the definition.
+2.  **Service catalogue** — `<PROTOCOLSERVICE>` elements define a service's request SID, positive-response SID, and parameter shape (`sub`-function byte, `did` 2-byte identifier, or none). `<DIAGINST>` elements bind a human-readable service name (from `<SHORTCUTNAME>`/`<NAME>`) and static parameter value (sub-function or DID) to a protocol service via `<DCLSRVTMPL>` indirection. The result is a `Map<string, CddService>` keyed by the space-separated hex byte sequence that identifies the message (e.g. `"22 F1 8C"`), covering both the `::req` and `::pos` variants.
+3.  **Untrusted-input safety** — attribute id values extracted from the file are interpolated into `new RegExp(...)` for the UNS lookup; they are escaped (`escapeRegExp`) before interpolation to prevent regex-injection / catastrophic-backtracking (ReDoS) from a crafted `.cdd` file.
+
+### 6.2 ISO 15765-2 Transport Reassembly (`UdsReconstructor` in `blf-host.ts`)
+
+Each CAN frame whose arbitration ID matches the CDD's request or response CAN-ID is classified by its PCI (Protocol Control Information) nibble — the high nibble of the first data byte:
+
+| PCI | Frame | Behavior |
+| :-: | --- | --- |
+| `0x0` | Single Frame (SF) | Length in the low nibble (or, when `0` on an FD frame / classic frame ≥ 9 bytes, an escaped 1-byte length in byte 1). Completes a UDS message immediately. Interrupts any pending multi-frame transfer on the same stream. |
+| `0x1` | First Frame (FF) | 12-bit length across the low nibble + byte 1 (or, when that is `0`, a 32-bit escaped length in bytes 2–5 — `FF_DL` escape). Starts a new reassembly buffer; does not complete a message. |
+| `0x2` | Consecutive Frame (CF) | Low nibble is a wrapping 0–15 sequence number, validated against the stream's `expectedSN`. A mismatch (or a CF with no active FF) aborts reassembly rather than silently concatenating misordered/garbage bytes — the row is flagged (`snError`) but still rendered as a raw transport frame. |
+| `0x3` | Flow Control (FC) | Low nibble selects `FC.CTS` (clear to send), `FC.WT` (wait), or `FC.OVFLW` (buffer overflow). Never completes a UDS message. |
+| other | — | Rendered as a generic `TP` transport row. |
+
+**Per-stream state** is keyed by `` `${channel}:${direction}` `` (`reqCanId` traffic vs. `resCanId` traffic, independently per channel), so concurrent diagnostic sessions on different CAN channels — or a request and response sharing reassembly timing — never share a buffer.
+
+A completed UDS message (`payload.length > 0`) is classified `req` (request), `pos` (positive response), or `neg` (negative response, first payload byte `0x7F`), then annotated by `annotateUds`:
+
+*   **Name/Service resolution** — the payload's first 1, 2, or 3 bytes are looked up in the `CddDatabase.services` map (3-byte for `did` params, 2-byte for `sub` params, 1-byte fallback). No match falls back to a synthesized `UDS_SID_0x..` label.
+*   **Negative response (NRC) resolution** — the rejected SID (payload byte 1) and NRC code (payload byte 2) are formatted as `diagId` (`"7F <sid> <nrc>"`); the NRC is named from a built-in ISO 14229-1 table (e.g. `0x31` → `requestOutOfRange`), and the rejected service name is resolved via a prefix scan of the CDD service map. Malformed/short payloads (`< 3` bytes for a claimed negative response, or `0` bytes for any UDS message) are labelled gracefully instead of throwing, since a corrupt or truncated log frame must not abort reconstruction for the whole file.
+*   **Src/Dst** — derived from `arbitrationId` against the known `reqCanId`/`resCanId` (never from the frame's RX/TX flag, which is capture-side and can be inverted when a log is captured from the ECU/gateway side rather than the tester side).
+*   **Conn** — a per-channel counter that increments each time a UDS message completes, letting the UI's **Conn** column visually group a transport exchange.
+
+Every diagnostic-CAN-ID frame — whether or not it completes a UDS message — is also emitted as a raw **OTP** (on-the-wire transport) row, with padding bytes rendered in `[brackets]` distinct from real payload bytes, so the underlying CAN-TP mechanics remain inspectable alongside the reassembled, human-readable UDS rows.
