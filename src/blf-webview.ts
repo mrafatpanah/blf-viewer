@@ -60,6 +60,9 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
       <option value="STD">STD</option>
       <option value="FD">CAN FD</option>
       <option value="ERR">Error</option>
+      <option value="DIAG">Diag (UDS+TP)</option>
+      <option value="UDS">UDS</option>
+      <option value="TP">TP frames</option>
     </select>
     <select id="fCh"><option value="">All Ch</option></select>
     <span class="toolbar-space"></span>
@@ -98,6 +101,9 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
       <option value="STD">STD</option>
       <option value="FD">CAN FD</option>
       <option value="ERR">Error</option>
+      <option value="DIAG">Diag (UDS+TP)</option>
+      <option value="UDS">UDS</option>
+      <option value="TP">TP frames</option>
     </select>
     <select id="sCh"><option value="">Any Ch</option></select>
     <button class="btn data-search-btn" id="btnSearchPrev" title="Previous match">◀</button>

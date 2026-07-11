@@ -5,7 +5,7 @@ export interface FilterState {
   id:      string;   // hex string, case-insensitive substring match
   data:    string;   // hex byte sequence, case-insensitive payload match
   dir:     string;   // '' | 'RX' | 'TX'
-  msgType: string;   // '' | 'STD' | 'FD' | 'ERR'
+  msgType: string;   // '' | 'STD' | 'FD' | 'ERR' | 'DIAG' | 'UDS' | 'TP'
   channel: string;   // '' | '0' | '1' | ...
 }
 

@@ -34,6 +34,31 @@ const msgs = [
 const ids = (result: CANMessage[]) =>
   result.map(m => `ch${m.channel}/0x${m.arbitrationId.toString(16).toUpperCase()}`).sort();
 
+suite('applyFilter – diagnostic type filter', () => {
+  const raw  = msg(0x123, 0);
+  const fd   = { ...msg(0x124, 0), isFd: true };
+  const otp  = { ...msg(0x782, 0), isOtp: true, otpType: 'SF' as const };
+  const uds  = { ...msg(0x782, 0), isUds: true, udsType: 'req' as const };
+  const rows = [raw, fd, otp, uds];
+
+  test('DIAG matches OTP and UDS rows only', () => {
+    assert.deepStrictEqual(applyFilter(rows, { ...no, msgType: 'DIAG' }), [otp, uds]);
+  });
+
+  test('UDS matches reassembled rows only', () => {
+    assert.deepStrictEqual(applyFilter(rows, { ...no, msgType: 'UDS' }), [uds]);
+  });
+
+  test('TP matches transport rows only', () => {
+    assert.deepStrictEqual(applyFilter(rows, { ...no, msgType: 'TP' }), [otp]);
+  });
+
+  test('physical types exclude synthetic UDS rows but keep raw TP frames', () => {
+    assert.deepStrictEqual(applyFilter(rows, { ...no, msgType: 'STD' }), [raw, otp]);
+    assert.deepStrictEqual(applyFilter(rows, { ...no, msgType: 'FD' }), [fd]);
+  });
+});
+
 suite('applyFilter – id@channel', () => {
   test('no filter returns all', () => {
     assert.strictEqual(applyFilter(msgs, no).length, 6);

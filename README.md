@@ -59,7 +59,7 @@ Filter by:
 - **Arbitration ID** — hex substring match, comma-separated list (e.g. `7E0,7E8`), or `id@channel` syntax to pin a segment to a specific channel (e.g. `100@0` matches ID `100` on channel 0 only; `100@0,100@1` matches the same ID on both channels). Segments without `@` respect the global channel dropdown.
 - **Data bytes** — contiguous payload byte sequence match, updated live as you type
 - **Direction** — RX, TX, or both
-- **Type** — Standard CAN, CAN FD, or Error frames
+- **Type** — Standard CAN, CAN FD, or Error frames; with a CDD loaded, also **Diag (UDS+TP)** (all diagnostic rows, like CANoe's Diag window), **UDS** (reassembled messages only), or **TP frames** (raw transport frames only)
 - **Channel** — individual channel or all
 
 Both the ID filter and the Search ID field have a right-edge resize handle. Drag horizontally to widen them; the chosen width is remembered per field across reloads.
