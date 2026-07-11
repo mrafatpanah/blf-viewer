@@ -540,6 +540,15 @@ const rowColors = new Map();
 let dbcLoaded   = false;
 let dbcFileName = '';
 
+// CDD state — true only when reconstruction ran (Request/Response CAN-IDs found)
+let cddActive   = false;
+
+// Name column is shared: DBC message names and CDD service/<OTP> names both use it.
+function updateNameCol() {
+  const nameCol = cols.find(c => c.key === 'name');
+  if (nameCol) { nameCol.visible = dbcLoaded || cddActive; }
+}
+
 // Grouping field key or null
 let groupBy = null;
 
@@ -1745,9 +1754,7 @@ window.addEventListener('message', ({ data: msg }) => {
     if (badge)    { badge.textContent = msg.fileName + '  (' + msg.messageCount + ' msg)'; badge.style.display = 'inline-flex'; }
     if (clearBtn) { clearBtn.style.display = 'inline-flex'; }
 
-    // Show the Name column
-    const nameCol = cols.find(c => c.key === 'name');
-    if (nameCol) { nameCol.visible = true; }
+    updateNameCol();
     buildHeader();
 
     showToast('DBC loaded: ' + msg.fileName);
@@ -1766,9 +1773,7 @@ window.addEventListener('message', ({ data: msg }) => {
     if (badge)    { badge.style.display = 'none'; }
     if (clearBtn) { clearBtn.style.display = 'none'; }
 
-    // Hide the Name column
-    const nameCol = cols.find(c => c.key === 'name');
-    if (nameCol) { nameCol.visible = false; }
+    updateNameCol();
     buildHeader();
 
     resetAndRefetch();
@@ -1782,13 +1787,17 @@ window.addEventListener('message', ({ data: msg }) => {
     if (badge)    { badge.textContent = msg.fileName + '  (' + msg.serviceCount + ' services)' + suffix; badge.style.display = 'inline-flex'; }
     if (clearBtn) { clearBtn.style.display = 'inline-flex'; }
 
+    // Diagnostic columns (incl. Name) track whether reconstruction actually ran —
+    // this also retracts them when an active CDD is replaced by an inactive one.
+    cddActive = msg.active;
+    ['diagId', 'src', 'dst', 'conn', 'service'].forEach(key => {
+      const col = cols.find(c => c.key === key);
+      if (col) { col.visible = msg.active; }
+    });
+    updateNameCol();
+    buildHeader();
+
     if (msg.active) {
-      // Automatically show diagnostic columns only when reconstruction actually ran
-      ['diagId', 'src', 'dst', 'conn', 'service'].forEach(key => {
-        const col = cols.find(c => c.key === key);
-        if (col) { col.visible = true; }
-      });
-      buildHeader();
       showToast('CDD loaded: ' + msg.fileName);
     } else {
       showToast('CDD loaded but no Request/Response CAN-ID found — diagnostics inactive');
@@ -1804,11 +1813,13 @@ window.addEventListener('message', ({ data: msg }) => {
     if (badge)    { badge.style.display = 'none'; }
     if (clearBtn) { clearBtn.style.display = 'none'; }
 
-    // Automatically hide diagnostic columns
+    // Automatically hide diagnostic columns; Name stays if a DBC is still loaded
+    cddActive = false;
     ['diagId', 'src', 'dst', 'conn', 'service'].forEach(key => {
       const col = cols.find(c => c.key === key);
       if (col) { col.visible = false; }
     });
+    updateNameCol();
     buildHeader();
 
     resetAndRefetch();

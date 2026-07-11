@@ -334,6 +334,20 @@ suite('reconstructUdsMessages', () => {
     assert.strictEqual(uds.dst, '7E0');
   });
 
+  test('OTP transport rows carry src/dst too (CANoe parity)', () => {
+    const input = [
+      diag(REQ, [0x02, 0x10, 0x01]),               // SF request
+      diag(RES, [0x10, 0x0a, 1, 2, 3, 4, 5, 6]),   // FF response
+      diag(REQ, [0x30, 0, 0]),                      // FC from the requester
+    ];
+    const out = reconstructUdsMessages(input, REQ, RES);
+    const otp = out.filter(m => m.isOtp);
+    assert.strictEqual(otp.length, 3);
+    assert.deepStrictEqual([otp[0].src, otp[0].dst], ['7E0', '7E8']); // SF: req → res
+    assert.deepStrictEqual([otp[1].src, otp[1].dst], ['7E8', '7E0']); // FF: res → req
+    assert.deepStrictEqual([otp[2].src, otp[2].dst], ['7E0', '7E8']); // FC: req → res
+  });
+
   test('connection index increments per completed message', () => {
     const input = [
       diag(REQ, [0x02, 0x10, 0x01]),

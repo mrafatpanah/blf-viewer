@@ -558,18 +558,22 @@ export function reconstructUdsMessages(
       activeConnMap.set(m.channel, conn);
     }
 
-    result.push({ ...m, isOtp: true, otpType, formattedData, conn, name: '<OTP>' });
+    // src = sender's CAN ID, dst = receiver's CAN ID — on every diag frame, transport
+    // rows included (CANoe parity). Keyed on arbitrationId (authoritative), not isRx —
+    // a response can be TX when the log is captured from the ECU/gateway side.
+    const isResponse = m.arbitrationId === resCanId;
+    const src = isResponse ? resHex : reqHex;
+    const dst = isResponse ? reqHex : resHex;
+
+    result.push({ ...m, isOtp: true, otpType, formattedData, conn, name: '<OTP>', src, dst });
 
     if (completedUds) {
       completedUds.conn = conn;
       activeConnMap.set(m.channel, connCounter++); // next frame on this channel starts a new connection
 
       annotateUds(completedUds, cddDb);
-      // src = sender's CAN ID, dst = receiver's CAN ID. Keyed on arbitrationId (authoritative),
-      // not isRx — a response can be TX when the log is captured from the ECU/gateway side.
-      const isResponse = completedUds.arbitrationId === resCanId;
-      completedUds.src = isResponse ? resHex : reqHex;
-      completedUds.dst = isResponse ? reqHex : resHex;
+      completedUds.src = src;
+      completedUds.dst = dst;
 
       result.push(completedUds);
     }
