@@ -226,7 +226,7 @@ sequenceDiagram
         note over Host: "active: false" — CDD loaded but reconstruction inactive
     end
     Host->>View: postMessage("cddLoaded", { fileName, serviceCount, active })
-    note over View: Badge shows file + service count.<br/>If active, Diag ID/Src/Dst/Conn/Service columns auto-shown.
+    note over View: Badge shows file + service count.<br/>If active, Name/Diag ID/Src/Dst/Conn/Service columns auto-shown.
     View->>Host: postMessage("requestPage", { pageStart: 0, ... })
     Host-->>View: postMessage("page", ...) — rows now include OTP + UDS types
 ```
@@ -412,7 +412,7 @@ A completed UDS message (`payload.length > 0`) is classified `req` (request), `p
 
 *   **Name/Service resolution** — the payload's first 1, 2, or 3 bytes are looked up in the `CddDatabase.services` map (3-byte for `did` params, 2-byte for `sub` params, 1-byte fallback). No match falls back to a synthesized `UDS_SID_0x..` label.
 *   **Negative response (NRC) resolution** — the rejected SID (payload byte 1) and NRC code (payload byte 2) are formatted as `diagId` (`"7F <sid> <nrc>"`); the NRC is named from a built-in ISO 14229-1 table (e.g. `0x31` → `requestOutOfRange`), and the rejected service name is resolved via a prefix scan of the CDD service map. Malformed/short payloads (`< 3` bytes for a claimed negative response, or `0` bytes for any UDS message) are labelled gracefully instead of throwing, since a corrupt or truncated log frame must not abort reconstruction for the whole file.
-*   **Src/Dst** — derived from `arbitrationId` against the known `reqCanId`/`resCanId` (never from the frame's RX/TX flag, which is capture-side and can be inverted when a log is captured from the ECU/gateway side rather than the tester side).
+*   **Src/Dst** — derived from `arbitrationId` against the known `reqCanId`/`resCanId` (never from the frame's RX/TX flag, which is capture-side and can be inverted when a log is captured from the ECU/gateway side rather than the tester side). Set on **every** diagnostic-CAN-ID frame — raw OTP transport rows as well as reassembled UDS rows — matching CANoe's Diag view.
 *   **Conn** — a per-channel counter that increments each time a UDS message completes, letting the UI's **Conn** column visually group a transport exchange.
 
 Every diagnostic-CAN-ID frame — whether or not it completes a UDS message — is also emitted as a raw **OTP** (on-the-wire transport) row, with padding bytes rendered in `[brackets]` distinct from real payload bytes, so the underlying CAN-TP mechanics remain inspectable alongside the reassembled, human-readable UDS rows.

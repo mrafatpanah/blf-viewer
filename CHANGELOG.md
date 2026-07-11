@@ -2,6 +2,13 @@
 
 All notable changes to the **BLF Viewer** extension are documented here.
 
+## [1.3.2] — 2026-07-11
+
+### Fixed
+
+- **Src/Dst on transport rows** — raw ISO-TP transport rows (`SF`/`FF`/`CF`/`FC.*`) now carry the **Src**/**Dst** CAN-IDs like the reassembled UDS rows, matching CANoe's Diag view which fills them on every diagnostic frame. Previously only the reassembled `req`/`pos`/`neg` rows had them, so most diagnostic rows showed an empty Src/Dst.
+- **Name column auto-shown on CDD import** — the **Name** column (where `<OTP>` markers and resolved service names like `Default Session Start::req` render) is now shown automatically when an active CDD loads, instead of staying hidden until enabled manually. Name-column visibility is now shared between DBC and CDD state, so clearing one database no longer hides names the other still provides.
+
 ## [1.3.1] — 2026-07-11
 
 ### Fixed

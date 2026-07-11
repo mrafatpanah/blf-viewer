@@ -42,7 +42,7 @@ Click the **⊕ CDD** button in the toolbar to import a Vector CANdela Studio (`
 - A badge shows the file name and the number of matched services
 - If the CDD's Request/Response CAN-ID pair is found, matching CAN traffic is reassembled per **ISO 15765-2 (CAN-TP)**: Single Frame, First Frame + Consecutive Frame (with sequence-number validation), and Flow Control are shown as raw transport rows (`SF` / `FF` / `CF` / `FC.CTS` / `FC.WT` / `FC.OVFLW`), padding bytes shown in `[brackets]`
 - Every completed multi-frame or single-frame UDS message is also shown as its own reassembled row, colored by outcome: **req** (request), **pos** (positive response), **neg** (negative response, labelled with the resolved NRC name, e.g. `requestOutOfRange`)
-- New **Diag ID**, **Src**, **Dst**, **Conn**, and **Service** columns (auto-shown when a CDD is active) surface the matched service name and connection grouping
+- New **Name**, **Diag ID**, **Src**, **Dst**, **Conn**, and **Service** columns (auto-shown when a CDD is active) surface the matched service name and connection grouping; **Src**/**Dst** are filled on every diagnostic frame — raw transport rows included — matching CANoe's Diag view
 - If the CDD has no Request/Response CAN-ID declared, the badge shows "inactive" and the raw CAN-TP traffic is still parsed but no service names are resolved
 - Click **✕** next to the badge to unload the CDD and return to raw CAN rows
 
