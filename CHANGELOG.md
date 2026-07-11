@@ -2,6 +2,12 @@
 
 All notable changes to the **BLF Viewer** extension are documented here.
 
+## [1.3.3] — 2026-07-12
+
+### Documentation
+
+- README release-notes section: add the missing 1.3.1 and 1.3.2 entries.
+
 ## [1.3.2] — 2026-07-11
 
 ### Added

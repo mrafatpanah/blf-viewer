@@ -190,6 +190,18 @@ This extension does not contribute any configurable settings.
 
 ## Release Notes
 
+### 1.3.3
+
+Documentation-only release: README release notes for 1.3.1 and 1.3.2.
+
+### 1.3.2
+
+Diagnostic type filters (**Diag (UDS+TP)** / **UDS** / **TP frames**) in the Filter and Search Type dropdowns, Src/Dst CAN-IDs on raw ISO-TP transport rows, and the Name column now auto-shown when an active CDD loads.
+
+### 1.3.1
+
+Fixed the `CAN_ERROR_EXT` parser reading the arbitration ID and data bytes at wrong struct offsets, so error-frame rows showed a garbage ID and shifted payload.
+
 ### 1.3.0
 
 CDD (Vector CANdela Studio) diagnostic database import, stateful ISO 15765-2 (CAN-TP) transport reconstruction, and UDS diagnostics columns (Diag ID, Src, Dst, Conn, Service) with request/positive/negative response labelling and NRC name resolution.
