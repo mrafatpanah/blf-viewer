@@ -38,6 +38,17 @@ suite('BLF parser', () => {
 		assert.deepStrictEqual(data.slice(0, 8), [0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7]);
 		assert.strictEqual(msg.data.length, 16);
 	});
+
+	test('parses CAN_ERROR_EXT id and data at python-can struct offsets', () => {
+		// <HHLBBBxLLH2x8s: channel(2) length(2) flags(4) ecc(1) position(1)
+		// dlc(1) pad(1) frameLength(4) id(4) flagsExt(2) pad(2) data(8)
+		const msg = parseCanErrorExt();
+
+		assert.strictEqual(msg.arbitrationId, 0x123);
+		assert.strictEqual(msg.isErrorFrame, true);
+		assert.strictEqual(msg.dlc, 8);
+		assert.deepStrictEqual([...msg.data], [0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7]);
+	});
 });
 
 suite('BLF host filters', () => {
@@ -107,6 +118,40 @@ function parseCanFdMessage64(dlc: number, validBytes = 0, extDataOffset = 0): CA
 		headerVersion: 2,
 		objectSize: buffer.length,
 		objectType: 101,
+	}, 0, 0);
+
+	assert.ok(msg);
+	return msg;
+}
+
+function parseCanErrorExt(): CANMessage {
+	const headerSize = 32;
+	const buffer = Buffer.alloc(headerSize + 32, 0);
+
+	let pos = headerSize;
+	buffer.writeUInt16LE(1, pos); pos += 2;          // channel
+	buffer.writeUInt16LE(0, pos); pos += 2;          // length
+	buffer.writeUInt32LE(0, pos); pos += 4;          // flags
+	buffer.writeUInt8(0, pos); pos += 1;             // ecc
+	buffer.writeUInt8(0, pos); pos += 1;             // position
+	buffer.writeUInt8(8, pos); pos += 1;             // dlc
+	pos += 1;                                        // pad
+	buffer.writeUInt32LE(0xdeadbeef, pos); pos += 4; // frameLength (decoy)
+	buffer.writeUInt32LE(0x123, pos); pos += 4;      // can id
+	buffer.writeUInt16LE(0, pos); pos += 2;          // flagsExt
+	pos += 2;                                        // pad
+	Buffer.from([0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7]).copy(buffer, pos);
+
+	const reader = new BLFReader('');
+	const parser = (reader as unknown as {
+		parseCANErrorFrame(buffer: Buffer, header: object, relTs: number, absTs: number): CANMessage | null;
+	}).parseCANErrorFrame.bind(reader);
+	const msg = parser(buffer, {
+		signature: 'LOBJ',
+		headerSize,
+		headerVersion: 1,
+		objectSize: buffer.length,
+		objectType: 73,
 	}, 0, 0);
 
 	assert.ok(msg);
