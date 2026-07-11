@@ -497,9 +497,10 @@ export class BLFReader {
       pos += 1; // ecc
       pos += 1; // position
       const dlc = buffer.readUInt8(pos); pos += 1;
-      pos += 1; // frame length (low byte) — skip
+      pos += 1; // pad
+      pos += 4; // frame length
       const canId = buffer.length >= pos + 4 ? buffer.readUInt32LE(pos) : 0; pos += 4;
-      pos += 4; // frame length full + flagsExt + pad
+      pos += 4; // flagsExt(2) + pad(2)
 
       const dataLen = Math.min(dlc, 8, buffer.length - pos);
       const canData = buffer.slice(pos, pos + dataLen);
