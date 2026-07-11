@@ -8,3 +8,4 @@ docs/superpowers/
 coverage/
 .nyc_output/
 *.lcov
+plans/
