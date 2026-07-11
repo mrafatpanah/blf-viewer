@@ -2,6 +2,12 @@
 
 All notable changes to the **BLF Viewer** extension are documented here.
 
+## [1.3.1] — 2026-07-11
+
+### Fixed
+
+- **CAN error-frame parser (`CAN_ERROR_EXT`)** — the arbitration ID was read from the `frameLength` field (4 bytes too early) and the data bytes started 4 bytes early, so error-frame rows showed a garbage ID and shifted payload. Offsets now match the python-can `CAN_ERROR_EXT_STRUCT` layout (`<HHLBBBxLLH2x8s`).
+
 ## [1.3.0] — 2026-07-10
 
 ### Added
