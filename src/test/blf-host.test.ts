@@ -34,6 +34,31 @@ const msgs = [
 const ids = (result: CANMessage[]) =>
   result.map(m => `ch${m.channel}/0x${m.arbitrationId.toString(16).toUpperCase()}`).sort();
 
+suite('applyFilter – diagnostic type filter', () => {
+  const raw  = msg(0x123, 0);
+  const fd   = { ...msg(0x124, 0), isFd: true };
+  const otp  = { ...msg(0x782, 0), isOtp: true, otpType: 'SF' as const };
+  const uds  = { ...msg(0x782, 0), isUds: true, udsType: 'req' as const };
+  const rows = [raw, fd, otp, uds];
+
+  test('DIAG matches OTP and UDS rows only', () => {
+    assert.deepStrictEqual(applyFilter(rows, { ...no, msgType: 'DIAG' }), [otp, uds]);
+  });
+
+  test('UDS matches reassembled rows only', () => {
+    assert.deepStrictEqual(applyFilter(rows, { ...no, msgType: 'UDS' }), [uds]);
+  });
+
+  test('TP matches transport rows only', () => {
+    assert.deepStrictEqual(applyFilter(rows, { ...no, msgType: 'TP' }), [otp]);
+  });
+
+  test('physical types exclude synthetic UDS rows but keep raw TP frames', () => {
+    assert.deepStrictEqual(applyFilter(rows, { ...no, msgType: 'STD' }), [raw, otp]);
+    assert.deepStrictEqual(applyFilter(rows, { ...no, msgType: 'FD' }), [fd]);
+  });
+});
+
 suite('applyFilter – id@channel', () => {
   test('no filter returns all', () => {
     assert.strictEqual(applyFilter(msgs, no).length, 6);
@@ -332,6 +357,20 @@ suite('reconstructUdsMessages', () => {
     const uds = reconstructUdsMessages(input, REQ, RES)[1];
     assert.strictEqual(uds.src, '7E8');
     assert.strictEqual(uds.dst, '7E0');
+  });
+
+  test('OTP transport rows carry src/dst too (CANoe parity)', () => {
+    const input = [
+      diag(REQ, [0x02, 0x10, 0x01]),               // SF request
+      diag(RES, [0x10, 0x0a, 1, 2, 3, 4, 5, 6]),   // FF response
+      diag(REQ, [0x30, 0, 0]),                      // FC from the requester
+    ];
+    const out = reconstructUdsMessages(input, REQ, RES);
+    const otp = out.filter(m => m.isOtp);
+    assert.strictEqual(otp.length, 3);
+    assert.deepStrictEqual([otp[0].src, otp[0].dst], ['7E0', '7E8']); // SF: req → res
+    assert.deepStrictEqual([otp[1].src, otp[1].dst], ['7E8', '7E0']); // FF: res → req
+    assert.deepStrictEqual([otp[2].src, otp[2].dst], ['7E0', '7E8']); // FC: req → res
   });
 
   test('connection index increments per completed message', () => {

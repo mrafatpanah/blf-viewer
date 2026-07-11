@@ -2,6 +2,17 @@
 
 All notable changes to the **BLF Viewer** extension are documented here.
 
+## [1.3.2] — 2026-07-11
+
+### Added
+
+- **Diagnostic type filters** — the Type dropdown in both the filter toolbar and the search panel gains **Diag (UDS+TP)**, **UDS**, and **TP frames** options, so diagnostic traffic can be isolated like CANoe's Diag window (all diagnostic rows, only reassembled UDS messages, or only raw transport frames). Physical type filters (`STD`/`FD`/`ERR`) no longer match the synthetic reassembled UDS rows — raw transport frames still match their physical type.
+
+### Fixed
+
+- **Src/Dst on transport rows** — raw ISO-TP transport rows (`SF`/`FF`/`CF`/`FC.*`) now carry the **Src**/**Dst** CAN-IDs like the reassembled UDS rows, matching CANoe's Diag view which fills them on every diagnostic frame. Previously only the reassembled `req`/`pos`/`neg` rows had them, so most diagnostic rows showed an empty Src/Dst.
+- **Name column auto-shown on CDD import** — the **Name** column (where `<OTP>` markers and resolved service names like `Default Session Start::req` render) is now shown automatically when an active CDD loads, instead of staying hidden until enabled manually. Name-column visibility is now shared between DBC and CDD state, so clearing one database no longer hides names the other still provides.
+
 ## [1.3.1] — 2026-07-11
 
 ### Fixed

@@ -105,10 +105,21 @@ function matchesFilterCriteria(m: CANMessage, criteria: CompiledFilterCriteria):
   // Direction filter
   if (dir && (m.isRx ? 'RX' : 'TX') !== dir) { return false; }
 
-  // Type filter
+  // Type filter — diagnostic categories first (rows produced by UDS reconstruction),
+  // then the physical frame types. Reassembled UDS rows are synthetic, so they never
+  // match a physical type; raw TP frames still do.
   if (msgType) {
-    const t = m.isErrorFrame ? 'ERR' : m.isFd ? 'FD' : 'STD';
-    if (t !== msgType) { return false; }
+    if (msgType === 'DIAG') {
+      if (!m.isUds && !m.isOtp) { return false; }
+    } else if (msgType === 'UDS') {
+      if (!m.isUds) { return false; }
+    } else if (msgType === 'TP') {
+      if (!m.isOtp) { return false; }
+    } else {
+      if (m.isUds) { return false; }
+      const t = m.isErrorFrame ? 'ERR' : m.isFd ? 'FD' : 'STD';
+      if (t !== msgType) { return false; }
+    }
   }
 
   // Data filter — fail-closed if input is non-empty but fully invalid hex (e.g. "GG" → "")
@@ -558,18 +569,22 @@ export function reconstructUdsMessages(
       activeConnMap.set(m.channel, conn);
     }
 
-    result.push({ ...m, isOtp: true, otpType, formattedData, conn, name: '<OTP>' });
+    // src = sender's CAN ID, dst = receiver's CAN ID — on every diag frame, transport
+    // rows included (CANoe parity). Keyed on arbitrationId (authoritative), not isRx —
+    // a response can be TX when the log is captured from the ECU/gateway side.
+    const isResponse = m.arbitrationId === resCanId;
+    const src = isResponse ? resHex : reqHex;
+    const dst = isResponse ? reqHex : resHex;
+
+    result.push({ ...m, isOtp: true, otpType, formattedData, conn, name: '<OTP>', src, dst });
 
     if (completedUds) {
       completedUds.conn = conn;
       activeConnMap.set(m.channel, connCounter++); // next frame on this channel starts a new connection
 
       annotateUds(completedUds, cddDb);
-      // src = sender's CAN ID, dst = receiver's CAN ID. Keyed on arbitrationId (authoritative),
-      // not isRx — a response can be TX when the log is captured from the ECU/gateway side.
-      const isResponse = completedUds.arbitrationId === resCanId;
-      completedUds.src = isResponse ? resHex : reqHex;
-      completedUds.dst = isResponse ? reqHex : resHex;
+      completedUds.src = src;
+      completedUds.dst = dst;
 
       result.push(completedUds);
     }
