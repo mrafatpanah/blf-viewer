@@ -46,6 +46,7 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
 
     // Per-panel DBC and CDD databases (in-memory, per-session)
     let dbcDb: DbcDatabase | null = null;
+    let dbcChannel: number | null = null;
     let cddDb: CddDatabase | null = null;
     let processedMessages: import('./blf-parser').CANMessage[] | null = originalMessages;
 
@@ -79,7 +80,7 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
           type:          'page',
           startIndex:    req.startIndex,
           totalFiltered: sorted.length,
-          rows:          page.map((m, li) => toWire(m, req.startIndex + li, dbcDb)),
+          rows:          page.map((m, li) => toWire(m, req.startIndex + li, dbcDb, dbcChannel)),
         });
         return;
       }
@@ -104,7 +105,7 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
         webviewPanel.webview.postMessage({
           type:    'searchResult',
           index,
-          row:     index >= 0 ? toWire(sorted[index], index, dbcDb) : undefined,
+          row:     index >= 0 ? toWire(sorted[index], index, dbcDb, dbcChannel) : undefined,
           message: index >= 0 ? undefined : 'No matching message found',
           total,
         });
@@ -126,6 +127,7 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
           }
           const text = fs.readFileSync(picked[0].fsPath, 'utf8');
           dbcDb = parseDbcFile(text, path.basename(picked[0].fsPath));
+          dbcChannel = null;
           webviewPanel.webview.postMessage({
             type:         'dbcLoaded',
             fileName:     dbcDb.fileName,
@@ -140,8 +142,15 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
         return;
       }
 
+      if (req.type === 'setDbcChannel') {
+        dbcChannel = req.channel;
+        webviewPanel.webview.postMessage({ type: 'dbcChannelChanged', channel: dbcChannel });
+        return;
+      }
+
       if (req.type === 'clearDbc') {
         dbcDb = null;
+        dbcChannel = null;
         webviewPanel.webview.postMessage({ type: 'dbcCleared' });
         return;
       }
@@ -191,6 +200,7 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
       originalMessages = null;
       processedMessages = null;
       dbcDb = null;
+      dbcChannel = null;
       cddDb = null;
     });
   }

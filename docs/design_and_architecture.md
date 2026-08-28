@@ -177,15 +177,30 @@ sequenceDiagram
     Parser->>Parser: Tokenize lines & extract BO_ (Messages), SG_ (Signals), CM_ (Comments), VAL_ (Values)
     Parser-->>Host: Returns DbcDatabase in-memory structure
     Host->>View: postMessage("dbcLoaded", { fileName, messageCount })
-    note over View: Updates toolbar badge showing loaded DBC
+    note over View: Shows the DBC badge and channel selector.<br/>The selector defaults to "All Ch".
     View->>Cache: Clear pageCache
     View->>Host: postMessage("requestPage", { ... })
-    Host->>Parser: decodeSignal(data, signal) for matched IDs
-    note over Parser: Extracts bit segments based on Intel/Motorola formats
-    Parser-->>Host: Returns WireSignal[] (physStr, rawHex, valueLabel)
+    alt All channels selected or row channel matches selected channel
+        Host->>Parser: decodeSignal(data, signal) for matched IDs
+        note over Parser: Extracts bit segments based on Intel/Motorola formats
+        Parser-->>Host: Returns WireSignal[] (physStr, rawHex, valueLabel)
+    else Row belongs to another channel
+        Host->>Host: Leave msgName and signals undefined
+    end
     Host-->>View: Send WireMessages carrying names and signals
     note over View: Inspections panel displays detailed signal telemetry
+    User->>View: Selects "Ch N" or "All Ch"
+    View->>Host: postMessage("setDbcChannel", { channel })
+    Host->>Host: Update per-panel dbcChannel state
+    Host->>View: postMessage("dbcChannelChanged", { channel })
+    View->>Cache: Clear pageCache after acknowledgement
+    View->>Host: postMessage("requestPage", { ... })
 ```
+
+The DBC channel scope is per editor panel and uses the parser's 0-based channel
+numbers. `null` means **All Ch**, preserving the original behavior. The webview
+waits for `dbcChannelChanged` before invalidating and refetching its page cache,
+so new page requests cannot race ahead of the host's selected-channel state.
 
 ### 2.5 CDD Import & UDS/CAN-TP Reconstruction Flow
 

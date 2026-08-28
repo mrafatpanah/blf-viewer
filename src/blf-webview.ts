@@ -72,6 +72,9 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
     <span style="width:1px;height:18px;background:var(--border);flex-shrink:0"></span>
     <button class="btn" id="btnImportDbc" title="Import DBC file">⊕ DBC</button>
     <span class="dbc-badge" id="dbcBadge" style="display:none"></span>
+    <select id="dbcChannel" style="display:none" title="Apply DBC to channel">
+      <option value="">All Ch</option>
+    </select>
     <button class="btn" id="btnClearDbc" style="display:none" title="Remove DBC">✕</button>
     <span style="width:1px;height:18px;background:var(--border);flex-shrink:0"></span>
     <button class="btn" id="btnImportCdd" title="Import CDD file">⊕ CDD</button>
@@ -1377,6 +1380,7 @@ const fData = document.getElementById('fData');
 const fDir  = document.getElementById('fDir');
 const fType = document.getElementById('fType');
 const fCh   = document.getElementById('fCh');
+const dbcChannelSelect = document.getElementById('dbcChannel');
 const filterIdWrap = document.getElementById('filterIdWrap');
 const filterResize = document.getElementById('filterResize');
 const sId   = document.getElementById('sId');
@@ -1606,6 +1610,14 @@ document.getElementById('btnImportDbc').addEventListener('click', () => {
   vscode.postMessage({ type: 'openDbcFile' });
 });
 
+dbcChannelSelect?.addEventListener('change', () => {
+  const value = dbcChannelSelect.value;
+  vscode.postMessage({
+    type: 'setDbcChannel',
+    channel: value === '' ? null : Number(value),
+  });
+});
+
 document.getElementById('btnClearDbc').addEventListener('click', () => {
   vscode.postMessage({ type: 'clearDbc' });
 });
@@ -1658,6 +1670,10 @@ window.addEventListener('message', ({ data: msg }) => {
       const so = document.createElement('option');
       so.value = String(c); so.textContent = 'Ch ' + c;
       sCh?.appendChild(so);
+
+      const dbo = document.createElement('option');
+      dbo.value = String(c); dbo.textContent = 'Ch ' + c;
+      dbcChannelSelect?.appendChild(dbo);
     });
 
     // Parse errors
@@ -1758,6 +1774,7 @@ window.addEventListener('message', ({ data: msg }) => {
     const badge    = document.getElementById('dbcBadge');
     const clearBtn = document.getElementById('btnClearDbc');
     if (badge)    { badge.textContent = msg.fileName + '  (' + msg.messageCount + ' msg)'; badge.style.display = 'inline-flex'; }
+    if (dbcChannelSelect) { dbcChannelSelect.value = ''; dbcChannelSelect.style.display = 'inline-flex'; }
     if (clearBtn) { clearBtn.style.display = 'inline-flex'; }
 
     updateNameCol();
@@ -1769,6 +1786,13 @@ window.addEventListener('message', ({ data: msg }) => {
     resetAndRefetch();
   }
 
+  // ── dbcChannelChanged ────────────────────────────────────────────────────
+  else if (msg.type === 'dbcChannelChanged') {
+    if (dbcChannelSelect) { dbcChannelSelect.value = msg.channel === null ? '' : String(msg.channel); }
+    showToast(msg.channel === null ? 'DBC applied to all channels' : 'DBC applied to Ch ' + msg.channel);
+    resetAndRefetch();
+  }
+
   // ── dbcCleared ────────────────────────────────────────────────────────────
   else if (msg.type === 'dbcCleared') {
     dbcLoaded   = false;
@@ -1777,6 +1801,7 @@ window.addEventListener('message', ({ data: msg }) => {
     const badge    = document.getElementById('dbcBadge');
     const clearBtn = document.getElementById('btnClearDbc');
     if (badge)    { badge.style.display = 'none'; }
+    if (dbcChannelSelect) { dbcChannelSelect.value = ''; dbcChannelSelect.style.display = 'none'; }
     if (clearBtn) { clearBtn.style.display = 'none'; }
 
     updateNameCol();

@@ -19,6 +19,7 @@ export type WebviewMessage =
   | { type: 'requestPage'; startIndex: number; count: number; filter: FilterState; sort: SortState; }
   | { type: 'searchFirst'; filter: FilterState; sort: SortState; search: FilterState; fromIndex?: number; direction?: 'forward' | 'backward'; }
   | { type: 'openDbcFile' }
+  | { type: 'setDbcChannel'; channel: number | null }
   | { type: 'clearDbc' }
   | { type: 'openCddFile' }
   | { type: 'clearCdd' };
@@ -99,6 +100,10 @@ export type HostMessage =
       type:         'dbcLoaded';
       fileName:     string;
       messageCount: number;
+    }
+  | {
+      type:    'dbcChannelChanged';
+      channel: number | null;
     }
   | {
       type: 'dbcCleared';

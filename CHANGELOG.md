@@ -2,6 +2,12 @@
 
 All notable changes to the **BLF Viewer** extension are documented here.
 
+## Unreleased
+
+### Added
+
+- **Channel-scoped DBC decoding** — the DBC toolbar now includes an **All Ch** / **Ch N** selector. The default continues to decode matching CAN IDs on every channel, while selecting one channel leaves same-ID traffic on other buses raw ([#5](https://github.com/mrafatpanah/blf-viewer/issues/5)).
+
 ## [1.3.3] — 2026-07-12
 
 ### Documentation

@@ -212,7 +212,12 @@ export function applySort(messages: CANMessage[], s: SortState): CANMessage[] {
 
 // ── Wire format converter ─────────────────────────────────────────────────────
 
-export function toWire(m: CANMessage, idx: number, dbc?: DbcDatabase | null): WireMessage {
+export function toWire(
+  m: CANMessage,
+  idx: number,
+  dbc?: DbcDatabase | null,
+  dbcChannel?: number | null
+): WireMessage {
   const flagsList: string[] = [];
   if (m.isExtendedId) { flagsList.push('EXT'); }
   if (m.isRemoteFrame) { flagsList.push('RTR'); }
@@ -222,7 +227,8 @@ export function toWire(m: CANMessage, idx: number, dbc?: DbcDatabase | null): Wi
   let msgName: string | undefined;
   let signals: WireSignal[] | undefined;
 
-  if (dbc && !m.isUds && !m.isOtp) {
+  const dbcAppliesToChannel = dbcChannel === null || dbcChannel === undefined || m.channel === dbcChannel;
+  if (dbc && dbcAppliesToChannel && !m.isUds && !m.isOtp) {
     const dbcMsg = dbc.messages.get(m.arbitrationId);
     if (dbcMsg) {
       msgName = dbcMsg.name;
