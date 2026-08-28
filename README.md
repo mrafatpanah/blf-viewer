@@ -191,6 +191,10 @@ This extension does not contribute any configurable settings.
 
 ## Release Notes
 
+### 1.4.0
+
+Channel-scoped DBC decoding: keep the default **All Ch** behavior or select **Ch N** to decode message names and signals only on one CAN channel, leaving same-ID traffic on other channels raw.
+
 ### 1.3.3
 
 Documentation-only release: README release notes for 1.3.1 and 1.3.2.
