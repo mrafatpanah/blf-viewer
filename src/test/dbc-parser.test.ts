@@ -130,7 +130,7 @@ suite('decodeSignal', () => {
 suite('toWire with DBC', () => {
   const db = parseDbcFile(DBC_TEXT, 'test.dbc');
 
-  function msg(): CANMessage {
+  function msg(channel = 0): CANMessage {
     return {
       relativeTimestamp: 0,
       absoluteTimestamp: 0,
@@ -140,7 +140,7 @@ suite('toWire with DBC', () => {
       isRx: true,
       dlc: 8,
       data: Buffer.from([0x10, 0x27, 0x28, 0x02, 0xfe, 0x00, 0x00, 0x00]),
-      channel: 0,
+      channel,
     };
   }
 
@@ -167,6 +167,24 @@ suite('toWire with DBC', () => {
     const m = msg();
     m.arbitrationId = 0x999;
     const w = toWire(m, 0, db);
+    assert.strictEqual(w.msgName, undefined);
+    assert.strictEqual(w.signals, undefined);
+  });
+
+  test('selected channel receives DBC annotations', () => {
+    const w = toWire(msg(1), 0, db, 1);
+    assert.strictEqual(w.msgName, 'EngineStatus');
+    assert.strictEqual(w.signals?.length, 4);
+  });
+
+  test('all-channel scope applies DBC annotations on every channel', () => {
+    const w = toWire(msg(1), 0, db, null);
+    assert.strictEqual(w.msgName, 'EngineStatus');
+    assert.strictEqual(w.signals?.length, 4);
+  });
+
+  test('other channels remain raw when a DBC channel is selected', () => {
+    const w = toWire(msg(0), 0, db, 1);
     assert.strictEqual(w.msgName, undefined);
     assert.strictEqual(w.signals, undefined);
   });

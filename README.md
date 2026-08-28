@@ -31,6 +31,7 @@ At a glance: total message count, recording duration, messages/sec throughput, u
 Click the **⊕ DBC** button in the toolbar to import a `.dbc` file. Once loaded:
 
 - A badge shows the file name and the number of matched messages
+- The channel selector beside the badge defaults to **All Ch**; choose **Ch N** to apply DBC message names and signal decoding only to that channel while leaving matching IDs on other channels raw
 - Every matched row in the table shows a **Name** column with the DBC message name
 - Selecting a matched row shows a **Signals** section in the detail panel with each signal's raw hex value, physical value (with unit), and value-table label for enum signals (e.g. `Drive`, `Park`)
 - Click **✕** next to the badge to unload the DBC and return to raw data
