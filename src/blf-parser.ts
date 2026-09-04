@@ -174,12 +174,17 @@ export class BLFReader {
   private header: FileHeader | null = null;
   private messages: CANMessage[] = [];
   private parseErrors: string[] = [];
+  private objectTail: Buffer = Buffer.alloc(0);
 
   constructor(filePath: string) {
     this.filePath = filePath;
   }
 
   async parse(): Promise<CANMessage[]> {
+    this.messages = [];
+    this.parseErrors = [];
+    this.objectTail = Buffer.alloc(0);
+
     try {
       const fileBuffer = fs.readFileSync(this.filePath);
 
@@ -214,10 +219,8 @@ export class BLFReader {
           this.messages.push(...messages);
         }
 
-        // Advance by object size, aligned to 4 bytes
-        let nextOffset = offset + container.objectSize;
-        const pad = (4 - (nextOffset % 4)) % 4;
-        nextOffset += pad;
+        // BLF stores objectSize % 4 padding bytes after each top-level object.
+        let nextOffset = offset + container.objectSize + (container.objectSize % 4);
 
         if (nextOffset <= offset) {
           // Safety: avoid infinite loop
@@ -366,6 +369,11 @@ export class BLFReader {
         return messages;
       }
 
+      if (this.objectTail.length > 0) {
+        containerData = Buffer.concat([this.objectTail, containerData]);
+        this.objectTail = Buffer.alloc(0);
+      }
+
       return this.parseObjects(containerData);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -398,15 +406,26 @@ export class BLFReader {
     while (offset <= data.length - OBJ_HEADER_BASE_SIZE) {
       // Find next LOBJ signature
       const nextObj = data.indexOf(Buffer.from('LOBJ'), offset);
-      if (nextObj === -1) { break; }
+      if (nextObj === -1) {
+        this.objectTail = data.slice(offset);
+        break;
+      }
 
       offset = nextObj;
-      if (data.length - offset < OBJ_HEADER_BASE_SIZE) { break; }
+      if (data.length - offset < OBJ_HEADER_BASE_SIZE) {
+        this.objectTail = data.slice(offset);
+        break;
+      }
 
       const objHeader = this.parseObjectHeader(data, offset);
       if (!objHeader || objHeader.objectSize < OBJ_HEADER_BASE_SIZE) {
         offset += 4;
         continue;
+      }
+
+      if (offset + objHeader.objectSize > data.length) {
+        this.objectTail = data.slice(offset);
+        break;
       }
 
       try {
@@ -435,11 +454,13 @@ export class BLFReader {
       }
 
       let nextOffset = offset + objHeader.objectSize;
-      const pad = (4 - (nextOffset % 4)) % 4;
-      nextOffset += pad;
 
       if (nextOffset <= offset) { nextOffset = offset + 4; }
       offset = nextOffset;
+    }
+
+    if (this.objectTail.length === 0 && offset < data.length) {
+      this.objectTail = data.slice(offset);
     }
 
     return messages;
@@ -522,7 +543,10 @@ export class BLFReader {
     }
   }
 
-  // CAN_FD_MSG_STRUCT: channel(2) + flags(1) + dlc(1) + arb_id(4) + frameLen(4) + bitCount(4) + fdFlags(1) + validBytes(1) + pad(5) + data(64)
+  // CAN_FD_MSG_STRUCT (Vector::BLF::CanFdMessage):
+  //   channel(2) + flags(1) + dlc(1) + arb_id(4) + frameLength(4)
+  //   + arbBitCount(1) + canFdFlags(1) + validDataBytes(1)
+  //   + reserved1(1) + reserved2(4) + data(64) + reserved3(4)
   private parseCANFDMessage(
     buffer: Buffer,
     header: ObjHeaderBase,
@@ -538,10 +562,11 @@ export class BLFReader {
       const dlc = buffer.readUInt8(pos); pos += 1;
       const canId = buffer.readUInt32LE(pos); pos += 4;
       pos += 4; // frame length
-      pos += 4; // bit count
+      pos += 1; // arb bit count (uint8)
       const fdFlags = buffer.readUInt8(pos); pos += 1;
       const validBytes = buffer.readUInt8(pos); pos += 1;
-      pos += 5; // reserved
+      pos += 1; // reserved1 (uint8)
+      pos += 4; // reserved2 (uint32)
 
       const requestedLen = validBytes > 0 ? validBytes : canFdDlcToLength(dlc);
       const dataLen = Math.min(requestedLen, 64, buffer.length - pos);

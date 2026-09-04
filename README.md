@@ -191,6 +191,10 @@ This extension does not contribute any configurable settings.
 
 ## Release Notes
 
+### 1.4.1
+
+Fixed shifted `CAN_FD_MESSAGE` payloads and missing frames in multi-container BLF recordings. Parser now matches Vector CAN FD field offsets, applies correct container padding, and carries split objects across container boundaries.
+
 ### 1.4.0
 
 Channel-scoped DBC decoding: keep the default **All Ch** behavior or select **Ch N** to decode message names and signals only on one CAN channel, leaving same-ID traffic on other channels raw.

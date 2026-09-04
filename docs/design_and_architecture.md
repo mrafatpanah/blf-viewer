@@ -261,7 +261,7 @@ BLF File Layout:
 +--------------------------------------------------------------+
 | Object Header Base ("LOBJ") - 16 bytes                       |
 +--------------------------------------------------------------+
-| Object Header V1 / V2 Extension - 12 or 16 bytes             |
+| Object Header V1 / V2 Extension - 16 or 24 bytes             |
 +--------------------------------------------------------------+
 | Object Payload (e.g. compressed container, CAN message, etc.)|
 +--------------------------------------------------------------+
@@ -284,10 +284,10 @@ BLF File Layout:
 *   **Signature** (4 bytes): ASCII `"LOBJ"`
 *   **Header Size** (2 bytes): LE uint16, offset to the object payload
 *   **Header Version** (2 bytes): LE uint16
-*   **Object Size** (4 bytes): LE uint32, size of header + payload (aligned to 4-byte boundaries)
+*   **Object Size** (4 bytes): LE uint32, size of header + payload. Top-level objects are followed by `objectSize % 4` padding bytes.
 *   **Object Type** (4 bytes): LE uint32
 
-#### C. Object Header Extension (V1/V2) – 12 or 16 Bytes
+#### C. Object Header Extension (V1/V2) – 16 or 24 Bytes
 *   **Flags** (4 bytes): LE uint32. Determines timestamp resolution:
     *   If bit 0 (`TIMESTAMP_FLAG_TEN_MICS` = 0x1) is set: resolution is **10 microseconds** (multiply by `10e-6`).
     *   Otherwise: resolution is **nanoseconds** (multiply by `1e-9`).
@@ -302,6 +302,7 @@ BLF File Layout:
     *   Acts as a compressed packaging wrap.
     *   Contains a `compressionMethod` (uint16 LE): `0` = raw (no compression), `2` = zlib deflate compression.
     *   Once inflated, contains a nested sequence of `LOBJ` structures (which the parser loops through recursively using `parseObjects`).
+    *   A nested object may cross a container boundary. The parser retains the incomplete tail and prepends it to the next inflated container before parsing continues.
 2.  **`CAN_MESSAGE` (Type 1) & `CAN_MESSAGE2` (Type 86)**:
     *   `channel` (2 bytes): uint16 LE, converted to 0-based channel representation.
     *   `msgFlags` (1 byte): direction (bit 0 set = TX, unset = RX) and remote frame status (bit 4 set = RTR).
@@ -311,7 +312,7 @@ BLF File Layout:
 3.  **`CAN_FD_MESSAGE` (Type 100)**:
     *   Supports high-bandwidth CAN FD logs.
     *   Includes additional flags like `ESI` (Error State Indicator) and `BRS` (Bitrate Switch).
-    *   Payload capacity extends up to 64 bytes.
+    *   Fixed fields after `frameLength` are `arbBitCount` (uint8), `canFdFlags` (uint8), `validDataBytes` (uint8), `reserved1` (uint8), and `reserved2` (uint32), followed by a 64-byte payload and `reserved3` (uint32).
 4.  **`CAN_FD_MESSAGE_64` (Type 101)**:
     *   Modern high-density CAN FD container layout. Holds values such as sample rates, frame lengths, and inline data payload.
 5.  **`CAN_ERROR_EXT` (Type 73)**:

@@ -43,11 +43,11 @@ const CONTAINER_INNER_HDR  = 16; // method(2)+reserved(6)+uncompSize(4)+reserved
 const CAN_STD_PAYLOAD = 16;
 const CAN_STD_OBJ_SIZE = FULL_OBJ_HDR + CAN_STD_PAYLOAD; // = 48
 
-// CAN_FD_MESSAGE fixed fields before data:
-// channel(2)+flags(1)+dlc(1)+id(4)+frameLen(4)+bitCount(4)+fdFlags(1)+validBytes(1)+pad(5) = 23
-const CAN_FD_FIXED = 23;
-
-function align4(n) { return Math.ceil(n / 4) * 4; }
+// CAN_FD_MESSAGE fixed fields before data (Vector::BLF::CanFdMessage):
+// channel(2)+flags(1)+dlc(1)+id(4)+frameLength(4)+arbBitCount(1)
+// +canFdFlags(1)+validDataBytes(1)+reserved1(1)+reserved2(4) = 20
+const CAN_FD_FIXED = 20;
+const CAN_FD_PAYLOAD = CAN_FD_FIXED + 64 + 4; // data[64] + reserved3(4)
 
 // ── Object builders ────────────────────────────────────────────────────────────
 
@@ -85,9 +85,8 @@ function makeCANMessage({ ch, id, tsNs, data, tx = false, ext = false }) {
  */
 function makeCANFDMessage({ ch, id, tsNs, data, brs = true, ext = false }) {
   const dataLen  = data.length;
-  const objSize  = FULL_OBJ_HDR + CAN_FD_FIXED + dataLen;
-  const bufSize  = align4(objSize);
-  const buf      = Buffer.alloc(bufSize, 0);
+  const objSize  = FULL_OBJ_HDR + CAN_FD_PAYLOAD;
+  const buf      = Buffer.alloc(objSize, 0);
   // ── LOBJ base header ──
   buf.write('LOBJ', 0, 'ascii');
   buf.writeUInt16LE(FULL_OBJ_HDR, 4);
@@ -104,30 +103,28 @@ function makeCANFDMessage({ ch, id, tsNs, data, brs = true, ext = false }) {
   buf.writeUInt8(0x00, 34);                                      // msgFlags (RX)
   buf.writeUInt8(9, 35);                                         // dlc=9 → 12 bytes
   buf.writeUInt32LE(ext ? (id | 0x80000000) : id, 36);          // arb id
-  buf.writeUInt32LE(0, 40);                                      // frameLen (unused)
-  buf.writeUInt32LE(0, 44);                                      // bitCount  (unused)
-  buf.writeUInt8(0x01 | (brs ? 0x02 : 0), 48);                  // fdFlags: FD + BRS
-  buf.writeUInt8(dataLen, 49);                                   // validBytes
-  // pad(5) at 50..54 already zero
-  Buffer.from(data).copy(buf, 55);                               // data
+  buf.writeUInt32LE(0, 40);                                      // frameLength (unused)
+  buf.writeUInt8(0, 44);                                         // arbBitCount (uint8)
+  buf.writeUInt8(0x01 | (brs ? 0x02 : 0), 45);                  // canFdFlags: FD + BRS
+  buf.writeUInt8(dataLen, 46);                                   // validDataBytes
+  // reserved1 at 47, reserved2 at 48..51 already zero
+  Buffer.from(data).copy(buf, 52);                               // data
   return buf;
 }
 
-function makeLogContainer(bufs) {
-  const payload = Buffer.concat(bufs);
+function makeLogContainer(payload) {
   const innerHdr = Buffer.alloc(CONTAINER_INNER_HDR, 0);
   innerHdr.writeUInt16LE(0, 0);               // method = NO_COMPRESSION
   innerHdr.writeUInt32LE(payload.length, 8);  // uncompressedSize
 
-  const objSize = FULL_OBJ_HDR + CONTAINER_INNER_HDR + payload.length;
-  const hdr = Buffer.alloc(FULL_OBJ_HDR, 0);
+  const objSize = OBJ_HEADER_BASE_SIZE + CONTAINER_INNER_HDR + payload.length;
+  const hdr = Buffer.alloc(OBJ_HEADER_BASE_SIZE, 0);
   hdr.write('LOBJ', 0, 'ascii');
-  hdr.writeUInt16LE(FULL_OBJ_HDR, 4);
+  hdr.writeUInt16LE(OBJ_HEADER_BASE_SIZE, 4);
   hdr.writeUInt16LE(1, 6);
   hdr.writeUInt32LE(objSize, 8);
   hdr.writeUInt32LE(10, 12);                  // objectType = LOG_CONTAINER
-  hdr.writeBigUInt64LE(0n, 24);
-  return Buffer.concat([hdr, innerHdr, payload]);
+  return Buffer.concat([hdr, innerHdr, payload, Buffer.alloc(objSize % 4)]);
 }
 
 /**
@@ -287,9 +284,19 @@ const stdBufs = allMsgs.map(makeCANMessage);
 // Simple approach: concatenate std + fd then let parser handle by LOBJ scan
 const containerPayload = Buffer.concat([...stdBufs, ...fdMsgs]);
 
-const containerBuf = makeLogContainer([containerPayload]);
-const fileSize = FILE_HEADER_SIZE + containerBuf.length;
-const fileBuf  = Buffer.concat([makeFileHeader(fileSize, 1), containerBuf]);
+// Split at non-object boundaries. Chunk remainders 1 and 3 also exercise BLF's
+// unusual objectSize % 4 top-level padding rule.
+const containerPayloads = [
+  containerPayload.subarray(0, 3001),
+  containerPayload.subarray(3001, 6004),
+  containerPayload.subarray(6004),
+];
+const containerBufs = containerPayloads.map(makeLogContainer);
+const fileSize = FILE_HEADER_SIZE + containerBufs.reduce((sum, buf) => sum + buf.length, 0);
+const fileBuf = Buffer.concat([
+  makeFileHeader(fileSize, allMsgs.length + fdMsgs.length),
+  ...containerBufs,
+]);
 
 const blfPath = join(__dir, 'two-channel.blf');
 writeFileSync(blfPath, fileBuf);
