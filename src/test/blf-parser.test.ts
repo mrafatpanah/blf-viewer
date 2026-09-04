@@ -38,6 +38,11 @@ suite('BLFReader integration (two-channel.blf)', () => {
       assert.strictEqual(m.data.length, 12);
       assert.strictEqual(m.bitrateSwitch, true);
     }
+
+    assert.strictEqual(fd[0].arbitrationId, 0x600);
+    assert.deepStrictEqual([...fd[0].data], [
+      0x40, 0x9c, 0x24, 0xfa, 0xb4, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    ]);
   });
 
   test('parses UDS request frames as TX', () => {

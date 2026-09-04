@@ -4,6 +4,17 @@ All notable changes to the **BLF Viewer** extension are documented here.
 
 ## Unreleased
 
+## [1.4.1] — 2026-09-04
+
+### Fixed
+
+- **CAN FD message parsing** — corrected the `CAN_FD_MESSAGE` field offsets to match Vector's layout. Payload bytes, FD/BRS/ESI flags, and DBC signals no longer appear shifted by three bytes.
+- **BLF container traversal** — use BLF's `objectSize % 4` padding rule and preserve nested objects split across container boundaries. Large recordings no longer silently lose frames between containers.
+
+### Tests
+
+- Updated the generated BLF fixture to use Vector-compatible CAN FD objects, top-level padding, and objects split across three containers.
+
 ## [1.4.0] — 2026-08-29
 
 ### Added
