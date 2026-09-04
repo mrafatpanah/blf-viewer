@@ -154,6 +154,13 @@ Uses VS Code CSS variables throughout — works correctly with any light or dark
 
 ---
 
+## Development
+
+See [Release Process](docs/releasing.md) for branching, versioning, validation,
+tagging, and GitHub Release steps.
+
+---
+
 ## Usage
 
 1. Open a `.blf` file via **File → Open File** or by double-clicking in the Explorer panel
