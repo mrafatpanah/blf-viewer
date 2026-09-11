@@ -3,7 +3,7 @@ import * as path    from 'path';
 import * as fs      from 'fs';
 
 import { BLFReader }                        from './blf-parser';
-import { applyFilter, applySort, findFirstMatchingIndex, findLastMatchingIndex, countMatches, toWire, reconstructUdsMessages } from './blf-host';
+import { applyFilter, applySort, findFirstMatchingIndex, findLastMatchingIndex, countMatches, toWire, reconstructUdsMessages, ViewCache } from './blf-host';
 import { getWebviewHtml, getNonce }         from './blf-webview';
 import { WebviewMessage }                   from './blf-types';
 import { parseDbcFile, DbcDatabase }        from './dbc-parser';
@@ -49,8 +49,10 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
     let dbcChannel: number | null = null;
     let cddDb: CddDatabase | null = null;
     let processedMessages: import('./blf-parser').CANMessage[] | null = originalMessages;
+    const viewCache = new ViewCache();
 
     const rebuildProcessedMessages = () => {
+      viewCache.invalidate();
       if (!originalMessages) {
         processedMessages = null;
         return;
@@ -72,8 +74,7 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
       if (!processedMessages) { return; }
 
       if (req.type === 'requestPage') {
-        const filtered = applyFilter(processedMessages, req.filter);
-        const sorted   = applySort(filtered,    req.sort);
+        const sorted   = viewCache.get(processedMessages, req.filter, req.sort);
         const page     = sorted.slice(req.startIndex, req.startIndex + req.count);
 
         webviewPanel.webview.postMessage({
@@ -86,8 +87,7 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
       }
 
       if (req.type === 'searchFirst') {
-        const filtered  = applyFilter(processedMessages, req.filter);
-        const sorted    = applySort(filtered, req.sort);
+        const sorted    = viewCache.get(processedMessages, req.filter, req.sort);
         const fromIndex = req.fromIndex ?? 0;
         const direction = req.direction ?? 'forward';
 
