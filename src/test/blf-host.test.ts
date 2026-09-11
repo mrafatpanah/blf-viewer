@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { applyFilter, applySort, toWire, UdsReconstructor, reconstructUdsMessages } from '../blf-host';
+import { applyFilter, applySort, toWire, UdsReconstructor, reconstructUdsMessages, ViewCache } from '../blf-host';
 import { CANMessage } from '../blf-parser';
 import { FilterState, SortState } from '../blf-types';
 
@@ -391,5 +391,54 @@ suite('reconstructUdsMessages', () => {
     const neg = reconstructUdsMessages([diag(RES, [0x03, 0x7f, 0x10, 0x22])], REQ, RES)[1];
     assert.strictEqual(neg.name, 'SID_0x10::neg(conditionsNotCorrect)');
     assert.strictEqual(neg.diagId, '7F 10 22');
+  });
+});
+
+suite('ViewCache', () => {
+  const asc: SortState = { col: 'i', dir: 'asc' };
+  const desc: SortState = { col: 'i', dir: 'desc' };
+
+  test('returns same reference on repeat call', () => {
+    const cache = new ViewCache();
+    const first = cache.get(msgs, no, asc);
+    const second = cache.get(msgs, no, asc);
+    assert.strictEqual(first, second);
+  });
+
+  test('filter change recomputes', () => {
+    const cache = new ViewCache();
+    const f1 = { ...no, id: '1' };
+    const f2 = { ...no, id: '2' };
+    assert.deepStrictEqual(cache.get(msgs, f1, asc), applySort(applyFilter(msgs, f1), asc));
+    assert.deepStrictEqual(cache.get(msgs, f2, asc), applySort(applyFilter(msgs, f2), asc));
+  });
+
+  test('sort change recomputes', () => {
+    const cache = new ViewCache();
+    const first = cache.get(msgs, no, asc);
+    const second = cache.get(msgs, no, desc);
+    assert.deepStrictEqual(second, first.slice().reverse());
+  });
+
+  test('invalidate forces recompute', () => {
+    const cache = new ViewCache();
+    const input = msgs.slice();
+    const before = cache.get(input, no, asc);
+    assert.strictEqual(before.length, input.length);
+    input.push(msg(0x600, 0));
+    cache.invalidate();
+    const after = cache.get(input, no, asc);
+    assert.strictEqual(after.length, input.length);
+    assert.notStrictEqual(after, before);
+  });
+
+  test('no key collision from user input', () => {
+    const cache = new ViewCache();
+    const f1 = { ...no, id: 'a', data: 'b' };
+    const f2 = { ...no, id: 'a\0b', data: '' };
+    const first = cache.get(msgs, f1, asc);
+    const second = cache.get(msgs, f2, asc);
+    assert.notStrictEqual(first, second);
+    assert.deepStrictEqual(second, applySort(applyFilter(msgs, f2), asc));
   });
 });
