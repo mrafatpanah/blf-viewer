@@ -598,3 +598,27 @@ export function reconstructUdsMessages(
 
   return result;
 }
+
+// ── View cache ────────────────────────────────────────────────────────────────
+// One-entry memo of the filtered+sorted view. Scrolling issues a requestPage
+// per 60-row page miss; filter/sort state changes far less often than pages
+// are requested, so a single-key cache removes almost all repeat work.
+
+export class ViewCache {
+  private key: string | null = null;
+  private view: CANMessage[] | null = null;
+
+  get(messages: CANMessage[], f: FilterState, s: SortState): CANMessage[] {
+    const key = [f.id, f.data, f.dir, f.msgType, f.channel, s?.col ?? 'i', s?.dir ?? 'asc'].join('\0');
+    if (this.key === key && this.view) { return this.view; }
+    const view = applySort(applyFilter(messages, f), s);
+    this.key = key;
+    this.view = view;
+    return view;
+  }
+
+  invalidate(): void {
+    this.key = null;
+    this.view = null;
+  }
+}

@@ -422,14 +422,19 @@ suite('ViewCache', () => {
 
   test('invalidate forces recompute', () => {
     const cache = new ViewCache();
+    // Active filter (matches every fixture id, all contain '0') so the cached
+    // view is a fresh array: with the empty filter the fast path aliases the
+    // input array and pushing onto it would mutate the cached view as well.
+    const f = { ...no, id: '0' };
     const input = msgs.slice();
-    const before = cache.get(input, no, asc);
+    const before = cache.get(input, f, asc);
     assert.strictEqual(before.length, input.length);
     input.push(msg(0x600, 0));
     cache.invalidate();
-    const after = cache.get(input, no, asc);
+    const after = cache.get(input, f, asc);
     assert.strictEqual(after.length, input.length);
     assert.notStrictEqual(after, before);
+    assert.deepStrictEqual(after, applySort(applyFilter(input, f), asc));
   });
 
   test('no key collision from user input', () => {
