@@ -88,6 +88,21 @@ suite('parseCANMessage flags', () => {
   });
 });
 
+suite('CAN_MESSAGE2 parity with CAN_MESSAGE (python-can CAN_MSG_STRUCT <HBBL8s)', () => {
+  test('type 86 decodes identically to type 1 for the same bytes', () => {
+    const a = parseCanMessage({ canId: 0x18fedcba | 0x80000000, flags: 0x01, channel: 2 });
+    const b = parseCanMessage({ canId: 0x18fedcba | 0x80000000, flags: 0x01, channel: 2, objectType: 86 });
+    assert.deepStrictEqual(b, a);
+  });
+
+  test('type 86 sets extended id, TX direction, channel conversion', () => {
+    const m = parseCanMessage({ canId: 0x100, flags: 0x00, channel: 1, objectType: 86 });
+    assert.strictEqual(m.arbitrationId, 0x100);
+    assert.strictEqual(m.isRx, true);
+    assert.strictEqual(m.channel, 0);
+  });
+});
+
 suite('parseObjectTimestamp resolution flag', () => {
   test('nanosecond resolution by default, 10 µs with flag', () => {
     // flags=0 → ns: 1.5e9 ns = 1.5 s
@@ -99,7 +114,7 @@ suite('parseObjectTimestamp resolution flag', () => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function parseCanMessage(opts: { canId?: number; flags?: number; channel?: number }): CANMessage {
+function parseCanMessage(opts: { canId?: number; flags?: number; channel?: number; objectType?: number }): CANMessage {
   const headerSize = 32;
   const buffer = Buffer.alloc(headerSize + 16, 0);
   let pos = headerSize;
@@ -117,7 +132,7 @@ function parseCanMessage(opts: { canId?: number; flags?: number; channel?: numbe
     headerSize,
     headerVersion: 1,
     objectSize: buffer.length,
-    objectType: 1,
+    objectType: opts.objectType ?? 1,
   }, 0, 0);
 
   assert.ok(msg);
