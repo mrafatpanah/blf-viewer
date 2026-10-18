@@ -163,6 +163,17 @@ function systemTimeToTimestamp(st: TSystemTime): number {
   }
 }
 
+// Range-check a Windows SYSTEMTIME tuple. Date.UTC rolls over out-of-range
+// fields instead of throwing, so explicit validation is the only way to
+// catch corrupt header timestamps.
+function isValidSystemTime(st: TSystemTime): boolean {
+  const [year, month, , day, hour, minute, second] = st;
+  return year >= 1980 && year <= 2100
+      && month >= 1 && month <= 12
+      && day >= 1 && day <= 31
+      && hour <= 23 && minute <= 59 && second <= 60;
+}
+
 export function canFdDlcToLength(dlc: number): number {
   const map = [0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64];
   return map[dlc & 0x0f] ?? 0;
@@ -293,6 +304,16 @@ export class BLFReader {
       r2.readUInt16LE(),
     ];
 
+    if (fileSize > 0 && fileSize !== buffer.length) {
+      this.parseErrors.push(`File size mismatch: header claims ${fileSize} bytes but file is ${buffer.length} bytes (file may be truncated)`);
+    }
+    if (!isValidSystemTime(startTime)) {
+      this.parseErrors.push('Invalid start SYSTEMTIME in file header; timestamps fall back to epoch');
+    }
+    if (!isValidSystemTime(stopTime)) {
+      this.parseErrors.push('Invalid stop SYSTEMTIME in file header');
+    }
+
     return {
       signature,
       headerSize: hdrSize,
@@ -316,6 +337,7 @@ export class BLFReader {
     const objectType = buffer.readUInt32LE(offset + 12);
 
     if (objectSize < OBJ_HEADER_BASE_SIZE) { return null; }
+    if (headerSize < OBJ_HEADER_BASE_SIZE || headerSize > objectSize) { return null; }
 
     return { signature: sig, headerSize, headerVersion, objectSize, objectType };
   }
