@@ -4,9 +4,9 @@
 [![Open VSX Version](https://img.shields.io/open-vsx/v/mafatpanah/blf-viewer?logo=eclipse&label=Open%20VSX)](https://open-vsx.org/extension/mafatpanah/blf-viewer)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-View and analyze **Binary Logging Format (BLF)** CAN bus log files directly in VS Code — no external tools required.
+View and analyze **Binary Logging Format (BLF)** CAN bus log files directly in VS Code — with DBC signal decoding and UDS/ISO-TP diagnostic reassembly from CDD files. No external tools required.
 
-BLF is the native recording format of Vector CANalyzer, CANoe, and related automotive diagnostic tools. This extension lets you inspect `.blf` files as a structured, filterable table without leaving your editor.
+BLF is the native recording format of Vector CANalyzer, CANoe, and related automotive diagnostic tools. This extension opens `.blf` files as a structured, filterable table without leaving your editor. It runs completely offline — no telemetry and no uploads.
 
 ---
 
@@ -201,6 +201,10 @@ This extension does not contribute any configurable settings.
 ---
 
 ## Release Notes
+
+### 1.5.0
+
+Hardening release. zlib containers are size-capped against decompression bombs, ISO-TP reassembly bounds First-Frame length and no longer copies the buffer on every Consecutive Frame, and the remaining webview HTML sinks are escaped. Marketplace listing refresh (keywords, categories, gallery banner) and the characterization test suite for malformed DBC/CDD files.
 
 ### 1.4.2
 
