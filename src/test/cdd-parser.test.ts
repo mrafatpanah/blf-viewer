@@ -446,3 +446,52 @@ suite('toWire diagnostics', () => {
     assert.strictEqual(w.msgName, '<OTP>');
   });
 });
+
+// Characterization tests (plans/006): pin how the permissive regex parser
+// degrades on malformed CDD files. Update deliberately if parsing changes.
+suite('parseCddFile malformed input', () => {
+  test('empty string yields null ids and no services', () => {
+    const db = parseCddFile('', 'empty.cdd');
+    assert.strictEqual(db.requestCanId, null);
+    assert.strictEqual(db.responseCanId, null);
+    assert.strictEqual(db.services.size, 0);
+  });
+
+  test('non-XML text yields null ids and no services', () => {
+    const db = parseCddFile('hello world', 'x.cdd');
+    assert.strictEqual(db.requestCanId, null);
+    assert.strictEqual(db.responseCanId, null);
+    assert.strictEqual(db.services.size, 0);
+  });
+
+  test('UNSDEF present but UNS entries removed → both CAN-IDs null', () => {
+    const xml = mockCddXml.replace(/<UNS oid='[^']*' attrref='[^']*' v='\d+'\/>/g, '');
+    const db = parseCddFile(xml, 'x.cdd');
+    assert.strictEqual(db.requestCanId, null);
+    assert.strictEqual(db.responseCanId, null);
+  });
+
+  test('UNS with non-numeric v leaves the id null (regex v=(\\d+) does not match)', () => {
+    const xml = mockCddXml.replace("v='1922'", "v='abc'");
+    const db = parseCddFile(xml, 'x.cdd');
+    assert.strictEqual(db.requestCanId, null);
+    assert.strictEqual(db.responseCanId, 1930);
+  });
+
+  test('SERVICE whose tmplref resolves to nothing is skipped', () => {
+    const xml = mockCddXml.replace("tmplref='_000001BA6CC8A4F0'", "tmplref='_missing_'");
+    const db = parseCddFile(xml, 'x.cdd');
+    assert.strictEqual(db.services.size, 0);
+  });
+
+  test('PROTOCOLSERVICE without a ($xx) name is skipped', () => {
+    const xml = mockCddXml.replace('($10) DiagnosticSessionControl', 'NoSidMarker');
+    const db = parseCddFile(xml, 'x.cdd');
+    assert.strictEqual(db.services.size, 0);
+  });
+
+  test('truncated file returns a database object without throwing', () => {
+    const db = parseCddFile(mockCddXml.slice(0, Math.floor(mockCddXml.length / 2)), 'trunc.cdd');
+    assert.ok(db.services instanceof Map);
+  });
+});

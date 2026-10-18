@@ -189,3 +189,61 @@ suite('toWire with DBC', () => {
     assert.strictEqual(w.signals, undefined);
   });
 });
+
+// Characterization tests: pin the permissive parser's graceful-degradation
+// contract on malformed input. Assertions describe observed behavior; if a
+// planned parser change flips one of these, update it deliberately in the
+// same PR (see plans/006).
+suite('parseDbcFile malformed input', () => {
+  test('empty text yields zero messages', () => {
+    const db = parseDbcFile('', 'empty.dbc');
+    assert.strictEqual(db.messages.size, 0);
+  });
+
+  test('BO_ line without colon is ignored', () => {
+    const db = parseDbcFile('BO_ 256 Engine 8 ECU1\n', 'x.dbc');
+    assert.strictEqual(db.messages.size, 0);
+  });
+
+  test('SG_ without a bit spec leaves the message signalless', () => {
+    const db = parseDbcFile('BO_ 256 EngineStatus: 8 ECU1\n SG_ Foo : bar\n', 'x.dbc');
+    const eng = db.messages.get(0x100);
+    assert.ok(eng);
+    assert.strictEqual(eng.signals.length, 0);
+  });
+
+  test('SG_ with non-numeric factor is skipped (regex needs digits|bits@)', () => {
+    const db = parseDbcFile('BO_ 256 EngineStatus: 8 ECU1\n SG_ Foo : (abc,0)\n', 'x.dbc');
+    const eng = db.messages.get(0x100);
+    assert.ok(eng);
+    assert.strictEqual(eng.signals.length, 0);
+  });
+
+  test('VAL_ for unknown message id and unknown signal is ignored', () => {
+    const db = parseDbcFile(
+      'BO_ 256 EngineStatus: 8 ECU1\n SG_ Speed : 0|8@1+ (1,0) [-|] "" Vector__XXX\n' +
+      'VAL_ 999 Ghost 0 "Off"\nVAL_ 256 Ghost 1 "On"\n', 'x.dbc');
+    const eng = db.messages.get(0x100)!;
+    assert.ok(eng);
+    assert.ok(eng.signals.every(s => !s.valueTable));
+  });
+
+  test('CM_ whose quote never closes keeps the accumulated remainder', () => {
+    const db = parseDbcFile(DBC_TEXT + 'CM_ SG_ 256 EngineSpeed "never closes', 'x.dbc');
+    const comment = db.messages.get(0x100)!.signals.find(s => s.name === 'EngineSpeed')!.comment;
+    assert.strictEqual(typeof comment, 'string');  // pinned: un-closed comment degrades to its remainder text
+    assert.strictEqual(comment, 'never closes');
+  });
+
+  test('duplicate BO_ id: the later block wins', () => {
+    const db = parseDbcFile(
+      'BO_ 256 Alpha: 8 ECU1\nBO_ 256 Beta: 8 ECU1\n', 'x.dbc');
+    assert.strictEqual(db.messages.size, 1);
+    assert.strictEqual(db.messages.get(0x100)!.name, 'Beta');
+  });
+
+  test('decodeSignal beyond the buffer reads zero bytes', () => {
+    const r = decodeSignal(Buffer.from([0x01, 0x02]), sig({ startBit: 56, bitLength: 8 }));
+    assert.strictEqual(r.raw, 0);
+  });
+});
