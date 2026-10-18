@@ -197,6 +197,7 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
     });
 
     webviewPanel.onDidDispose(() => {
+      viewCache.invalidate();
       originalMessages = null;
       processedMessages = null;
       dbcDb = null;
