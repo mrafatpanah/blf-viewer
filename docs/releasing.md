@@ -65,6 +65,33 @@ The workflow builds the extension, packages the `.vsix`, creates the GitHub
 Release, and uploads the artifact. If the release already exists, it replaces
 the existing `.vsix` asset.
 
+The workflow then publishes the same `.vsix` to each registry whose secret is
+set: `OVSX_PAT` for Open VSX, `VSCE_PAT` for the VS Code Marketplace. A step
+whose secret is missing is skipped, so publish to that registry manually.
+Both publish steps use `--skip-duplicate`, so rerunning a failed job is safe.
+
+After the workflow finishes, check both listings:
+
+- <https://open-vsx.org/extension/mafatpanah/blf-viewer>
+- <https://marketplace.visualstudio.com/items?itemName=mafatpanah.blf-viewer>
+
+## Registry Credentials
+
+- **Open VSX**: Generate an Access Token at [open-vsx.org](https://open-vsx.org/)
+  (User Settings -> Access Tokens). Ensure the Eclipse Publisher Agreement is
+  signed. Add the token to GitHub repository secrets as `OVSX_PAT`.
+- **VS Code Marketplace**: Generate a Personal Access Token in Azure DevOps
+  with `Marketplace (Manage)` scope. Add to GitHub repository secrets as `VSCE_PAT`.
+
+To publish a release asset manually (Node 22 or newer):
+
+```bash
+VERSION=1.4.2
+gh release download "$VERSION" -p '*.vsix'
+npx ovsx publish "blf-viewer-$VERSION.vsix" -p "$OVSX_PAT"
+npx @vscode/vsce publish --packagePath "blf-viewer-$VERSION.vsix" -p "$VSCE_PAT"
+```
+
 ## Recovery
 
 - If validation fails before tagging, fix it through another pull request.

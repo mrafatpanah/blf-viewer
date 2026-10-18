@@ -19,3 +19,9 @@ CLAUDE.md
 .markdownlint.json
 coverage/**
 .nyc_output/**
+plans/**
+.agents/**
+.codex/**
+.remember/**
+AGENTS.md
+*.vsix

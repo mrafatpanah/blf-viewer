@@ -1135,13 +1135,36 @@ function showContextMenu(x, y, mi) {
   bind('cxCopyData', () => { if (m) copyText(m.data);  closeCtxMenu(); });
 
   bind('cxCopyCsv', () => {
-    const rows = [['#','Time','UTC','Arb ID','Type','Dir','Ch','DLC','Data','Flags'].join(',')];
     const all  = [];
     pageCache.forEach(page => page.forEach(r => {
       if (selectedSet.has(r.i) || r.i === selectedRowI) all.push(r);
     }));
-    all.sort((a,b) => a.i - b.i).forEach(r => {
-      rows.push([r.i+1, r.t, r.utc, r.id, r.type, r.dir, r.ch, r.dlc, '"'+r.data+'"', r.flags].join(','));
+    all.sort((a,b) => a.i - b.i);
+    const hasName = all.some(r => r.msgName);
+    const hasDiag = all.some(r => r.diagId);
+    const hasSrcDst = all.some(r => r.src);
+    const hasConn = all.some(r => r.conn !== undefined);
+    const hasService = all.some(r => r.service);
+    const hasSignals = all.some(r => r.signals && r.signals.length);
+    const head = ['#','Time','UTC','Arb ID'];
+    if (hasName) { head.push('Name'); }
+    head.push('Type','Dir','Ch','DLC','Data','Flags');
+    if (hasDiag) { head.push('Diag ID'); }
+    if (hasSrcDst) { head.push('Src','Dst'); }
+    if (hasConn) { head.push('Conn'); }
+    if (hasService) { head.push('Service'); }
+    if (hasSignals) { head.push('Signals'); }
+    const rows = [head.join(',')];
+    all.forEach(r => {
+      const row = [csvCell(r.i+1), csvCell(r.t), csvCell(r.utc), csvCell(r.id)];
+      if (hasName) { row.push(csvCell(r.msgName || '')); }
+      row.push(csvCell(r.type), csvCell(r.dir), csvCell(r.ch), csvCell(r.dlc), csvCell(r.data), csvCell(r.flags));
+      if (hasDiag) { row.push(csvCell(r.diagId || '')); }
+      if (hasSrcDst) { row.push(csvCell(r.src || ''), csvCell(r.dst || '')); }
+      if (hasConn) { row.push(csvCell(r.conn !== undefined ? r.conn : '')); }
+      if (hasService) { row.push(csvCell(r.service || '')); }
+      if (hasSignals) { row.push(csvCell(r.signals && r.signals.length ? r.signals.map(s => s.name + '=' + s.physStr).join('; ') : '')); }
+      rows.push(row.join(','));
     });
     copyText(rows.join('\\n'));
     closeCtxMenu();
@@ -1645,7 +1668,7 @@ window.addEventListener('message', ({ data: msg }) => {
   // ── init ──────────────────────────────────────────────────────────────────
   if (msg.type === 'init') {
     const h   = msg.header;
-    const dur = h ? h.stopTimestamp - h.startTimestamp : 0;
+    const dur = h && h.startTimestamp > 0 && h.stopTimestamp > h.startTimestamp ? h.stopTimestamp - h.startTimestamp : 0;
 
     setText('s-total', msg.totalCount.toLocaleString());
     setText('s-dur',   dur.toFixed(2) + 's');
@@ -1864,6 +1887,11 @@ window.addEventListener('message', ({ data: msg }) => {
 function esc(s) {
   if (typeof s !== 'string') return String(s ?? '');
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function csvCell(v) {
+  const s = String(v ?? '');
+  return /[",\\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
 function setText(id, text) {

@@ -4,6 +4,29 @@ All notable changes to the **BLF Viewer** extension are documented here.
 
 ## Unreleased
 
+## [1.4.2] — 2026-10-18
+
+### Added
+
+- **Open VSX** — the extension is now published to [Open VSX](https://open-vsx.org/extension/mafatpanah/blf-viewer), so it installs in VSCodium, Eclipse Theia, Gitpod, and other VS Code-compatible editors.
+
+### Changed
+
+- **Faster scrolling on large files** — the filtered and sorted view is computed once per filter/sort change and reused for every page and search request, instead of being rebuilt for each 60-row page.
+
+### Fixed
+
+- **Copy selection as CSV** now includes the DBC message Name, diagnostic (Diag ID, Src, Dst, Conn, Service) and decoded signal columns when present, and quotes values that contain commas, quotes, or line breaks.
+- **Corrupt BLF headers** — the viewer now reports a file-size mismatch, an invalid start/stop time, and object headers whose header size exceeds the object size. An invalid start time no longer rolls over into a wrong-but-plausible date; timestamps fall back to the epoch and the duration shows `0`.
+
+### Tests
+
+- Parity tests for `CAN_MESSAGE2` (type 86) and `CAN_ERROR_EXT` (type 73) against python-can's struct layouts, header/object bounds tests, and `ViewCache` tests.
+
+### Build
+
+- Release workflow publishes the same VSIX to Open VSX and the VS Code Marketplace (when the `OVSX_PAT` / `VSCE_PAT` secrets are set) and runs on Node 22. Internal planning and agent files are excluded from the package.
+
 ## [1.4.1] — 2026-09-04
 
 ### Fixed
