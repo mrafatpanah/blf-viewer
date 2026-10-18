@@ -320,8 +320,9 @@ export class BLFReader {
       fileSize,
       uncompressedSize,
       objectCount,
-      startTimestamp: systemTimeToTimestamp(startTime),
-      stopTimestamp: systemTimeToTimestamp(stopTime),
+      // Date.UTC rolls invalid fields over into a plausible wrong date; use 0 instead.
+      startTimestamp: isValidSystemTime(startTime) ? systemTimeToTimestamp(startTime) : 0,
+      stopTimestamp: isValidSystemTime(stopTime) ? systemTimeToTimestamp(stopTime) : 0,
     };
   }
 

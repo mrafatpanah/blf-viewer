@@ -95,6 +95,9 @@ suite('BLFReader header and object bounds', () => {
     const messages = await reader.parse();
     assert.strictEqual(messages.length, 1);
     assert.match(reader.getErrors().join('\n'), /SYSTEMTIME/);
+    // Month 13 must not roll over into January of the next year.
+    assert.strictEqual(reader.getHeader()?.startTimestamp, 0);
+    assert.strictEqual(messages[0].absoluteTimestamp, 0);
   });
 
   test('truncated tail object terminates', async () => {

@@ -1668,7 +1668,7 @@ window.addEventListener('message', ({ data: msg }) => {
   // ── init ──────────────────────────────────────────────────────────────────
   if (msg.type === 'init') {
     const h   = msg.header;
-    const dur = h ? h.stopTimestamp - h.startTimestamp : 0;
+    const dur = h && h.startTimestamp > 0 && h.stopTimestamp > h.startTimestamp ? h.stopTimestamp - h.startTimestamp : 0;
 
     setText('s-total', msg.totalCount.toLocaleString());
     setText('s-dur',   dur.toFixed(2) + 's');
