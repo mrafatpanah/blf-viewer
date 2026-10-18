@@ -934,14 +934,14 @@ function buildRowHTML(m) {
     let content;
     switch (col.key) {
       case 'i':       content = '<span class="t-idx">'   + (m.i+1)    + '</span>'; break;
-      case 't':       content = '<span class="t-time">'  + m.t        + '</span>'; break;
-      case 'utc':     content = '<span class="t-time">'  + m.utc      + '</span>'; break;
+      case 't':       content = '<span class="t-time">'  + esc(m.t)   + '</span>'; break;
+      case 'utc':     content = '<span class="t-time">'  + esc(m.utc) + '</span>'; break;
       case 'id':      content = '<span class="t-id">'    + esc(m.id)  + '</span>'; break;
       case 'name':    content = m.msgName
                         ? '<span style="color:var(--purple);font-weight:500">' + esc(m.msgName) + '</span>'
                         : '<span style="color:var(--fg2);font-size:11px">—</span>'; break;
-      case 'type':    content = '<span class="badge ' + tc + '">'     + m.type + '</span>'; break;
-      case 'dir':     content = '<span class="badge ' + dc + '">'     + m.dir  + '</span>'; break;
+      case 'type':    content = '<span class="badge ' + tc + '">'     + esc(m.type) + '</span>'; break;
+      case 'dir':     content = '<span class="badge ' + dc + '">'     + esc(m.dir)  + '</span>'; break;
       case 'ch':      content = m.ch;  break;
       case 'dlc':     content = m.dlc; break;
       case 'data':    content = '<span class="t-data">'  + esc(m.data) + '</span>'; break;
@@ -956,7 +956,7 @@ function buildRowHTML(m) {
                         ? '<span style="color:var(--blue)">' + esc(m.dst) + '</span>'
                         : '<span style="color:var(--fg2);font-size:11px">—</span>'; break;
       case 'conn':    content = m.conn !== undefined
-                        ? '<span style="color:var(--fg2)">' + m.conn + '</span>'
+                        ? '<span style="color:var(--fg2)">' + esc(m.conn) + '</span>'
                         : '<span style="color:var(--fg2);font-size:11px">—</span>'; break;
       case 'service': content = m.service
                         ? '<span style="color:var(--purple);font-weight:500">' + esc(m.service) + '</span>'
@@ -1262,7 +1262,7 @@ function setGroupBy(key) {
   groupBy = key;
   groupBar.classList.remove('hidden');
   groupChips.innerHTML =
-    '<div class="group-chip">' + key + '<button onclick="clearGroupBy()">×</button></div>';
+    '<div class="group-chip">' + esc(key) + '<button onclick="clearGroupBy()">×</button></div>';
   showToast('Grouped by ' + key);
 }
 
@@ -1326,20 +1326,20 @@ function showDetail(m) {
 
   let html =
     dr('Index',     m.i + 1) +
-    dr('Rel. Time', '<span style="color:var(--blue)">' + m.t + ' s</span>') +
+    dr('Rel. Time', '<span style="color:var(--blue)">' + esc(m.t) + ' s</span>') +
     dr('UTC',       '<span style="color:var(--blue)">' + esc(m.utc) + '</span>') +
     dr('Arb. ID',   '<span style="color:#e8c8a0">' + esc(m.id) + '</span>') +
     (m.msgName ? dr('Name', '<span style="color:var(--purple);font-weight:500">' + esc(m.msgName) + '</span>') : '') +
-    dr('Type',      m.type) +
-    dr('Direction', m.dir) +
+    dr('Type',      esc(m.type)) +
+    dr('Direction', esc(m.dir)) +
     dr('Channel',   m.ch) +
     dr('DLC',       m.dlc) +
-    dr('Flags',     m.flags || '—') +
+    dr('Flags',     esc(m.flags) || '—') +
     (m.diagId ? dr('Diag ID', '<span style="color:var(--yellow);font-weight:500">' + esc(m.diagId) + '</span>') : '') +
     (m.service ? dr('Service', '<span style="color:var(--purple);font-weight:500">' + esc(m.service) + '</span>') : '') +
     (m.src ? dr('Src', '<span style="color:var(--blue)">' + esc(m.src) + '</span>') : '') +
     (m.dst ? dr('Dst', '<span style="color:var(--blue)">' + esc(m.dst) + '</span>') : '') +
-    (m.conn !== undefined ? dr('Conn', String(m.conn)) : '') +
+    (m.conn !== undefined ? dr('Conn', esc(String(m.conn))) : '') +
     (color ? dr('Color', '<span style="text-transform:capitalize">' + color + '</span>') : '');
 
   if (bytes.length > 0) {
@@ -1348,7 +1348,7 @@ function showDetail(m) {
     html += '<div class="byte-row">'     + bytes.map(b   => {
       const isBracketed = b.startsWith('[') && b.endsWith(']');
       const style = isBracketed ? 'font-size:10px;color:var(--fg2);width:32px;' : '';
-      return '<div class="byte-cell" style="' + style + '">' + b + '</div>';
+      return '<div class="byte-cell" style="' + style + '">' + esc(b) + '</div>';
     }).join('') + '</div>';
     html += '<div style="padding:4px 14px 8px"><table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px">';
     html += '<tr>' + ['B','Hex','Dec','Bin'].map(h =>
@@ -1358,7 +1358,7 @@ function showDetail(m) {
       const d = parseInt(cleanB, 16);
       html += '<tr>' +
         '<td style="color:var(--fg2);padding:2px 6px">'  + i + '</td>' +
-        '<td style="color:#9cdcfe;padding:2px 6px">'     + cleanB + '</td>' +
+        '<td style="color:#9cdcfe;padding:2px 6px">'     + esc(cleanB) + '</td>' +
         '<td style="padding:2px 6px">'                    + (isNaN(d) ? '—' : d) + '</td>' +
         '<td style="color:#b5cea8;padding:2px 6px;letter-spacing:.1em">' + (isNaN(d) ? '—' : d.toString(2).padStart(8,'0')) + '</td>' +
         '</tr>';

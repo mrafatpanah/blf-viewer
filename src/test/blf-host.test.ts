@@ -447,3 +447,54 @@ suite('ViewCache', () => {
     assert.deepStrictEqual(second, applySort(applyFilter(msgs, f2), asc));
   });
 });
+
+suite('UdsReconstructor – FF length cap and chunked reassembly', () => {
+  test('FF_DL escape beyond MAX_TP_PAYLOAD is rejected and leaves CFs orphaned', () => {
+    const r = new UdsReconstructor(REQ, RES);
+    // FF_DL escape claims 0xFFFFFFFF (≈4 GiB).
+    const ff = r.processMessage(diag(REQ, [0x10, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xAA, 0xBB]));
+    assert.strictEqual(ff.otpType, 'FF');
+    assert.strictEqual(ff.snError, true);
+    // The stream never activated, so every following CF is an orphan.
+    const cf = r.processMessage(diag(REQ, [0x21, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]));
+    assert.strictEqual(cf.otpType, 'CF');
+    assert.strictEqual(cf.completedUds, undefined);
+    assert.strictEqual(cf.snError, true);
+  });
+
+  test('escape-length transfer reassembles across many CFs with SN wraparound', () => {
+    const r = new UdsReconstructor(REQ, RES);
+    // FF_DL escape claims 7000 bytes; first chunk carries 0xAA 0xBB.
+    const ff = r.processMessage(diag(REQ, [0x10, 0x00, 0x00, 0x00, 0x1B, 0x58, 0xAA, 0xBB]));
+    assert.strictEqual(ff.otpType, 'FF');
+    assert.strictEqual(ff.snError, undefined);
+
+    const last: { completedUds?: CANMessage } = {};
+    for (let k = 0; k < 1000; k++) {
+      const sn = (k + 1) & 0x0F;
+      const body: number[] = [];
+      for (let j = 0; j < 7; j++) { body.push((k * 7 + j) & 0xFF); }
+      const info = r.processMessage(diag(REQ, [0x20 | sn, ...body]));
+      assert.strictEqual(info.snError, undefined, `CF ${k}`);
+      if (info.completedUds) { last.completedUds = info.completedUds; }
+    }
+    assert.ok(last.completedUds, 'transfer completed');
+    assert.strictEqual(last.completedUds!.data.length, 7000);
+    assert.deepStrictEqual([...last.completedUds!.data.slice(0, 2)], [0xAA, 0xBB]);
+  });
+
+  test('sequence-error abort discards accumulated chunks before the next FF', () => {
+    const r = new UdsReconstructor(REQ, RES);
+    r.processMessage(diag(RES, [0x10, 0x14, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06])); // len 20
+    r.processMessage(diag(RES, [0x23, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d])); // wrong SN → abort
+
+    // Fresh exchange on the same stream must complete with only its own bytes.
+    r.processMessage(diag(RES, [0x10, 0x08, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6])); // len 8
+    const cf = r.processMessage(diag(RES, [0x21, 0xB1, 0xB2]));
+    assert.ok(cf.completedUds);
+    assert.deepStrictEqual(
+      [...cf.completedUds.data],
+      [0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xB1, 0xB2]
+    );
+  });
+});

@@ -4,6 +4,31 @@ All notable changes to the **BLF Viewer** extension are documented here.
 
 ## Unreleased
 
+## [1.5.0] — 2026-10-19
+
+### Security
+
+- **Decompression-bomb cap** — LOG_CONTAINER zlib data now decompresses with a `maxOutputLength` limit (default 256 MiB, configurable via `BLFReader` options), so a crafted small file can no longer crash the extension host with gigabytes of output.
+- **ISO-TP length cap** — a First Frame whose length claims more than 16 MiB is rejected instead of holding the reassembly stream open forever; oversized claims in corrupt logs can no longer swallow every following diagnostic frame.
+- **Quadratic reassembly fixed** — Consecutive Frame payloads now accumulate in chunks and concatenate once, instead of copying the whole buffer per frame (O(n²) → O(n)).
+- **Webview hardening** — the remaining HTML interpolation sites (byte cells, byte table, group chip, time/UTC/badge/conn cells, detail rows) are all escaped, closing a class of future regression.
+
+### Changed
+
+- **Marketplace listing** — richer keywords (CAN FD, UDS, ISO-TP, DBC, CDD, diagnostics…), categories, gallery banner theme, and a first paragraph that states the offline, no-telemetry promise. An obsolete marketplace badge was replaced.
+
+### Tests
+
+- Characterization suites for the DBC and CDD parsers on malformed input (15 cases pinning the graceful-degradation contract, no parser changes).
+
+### Docs
+
+- Removed the untouched `yo code` scaffold (`vsc-extension-quickstart.md`).
+
+### QA
+
+- A generated 285 MB / 6.2-million-message BLF parses in ~3 s with no errors, as a proxy for the 1 GB-class-file criterion.
+
 ## [1.4.2] — 2026-10-18
 
 ### Added

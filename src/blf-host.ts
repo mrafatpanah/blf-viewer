@@ -316,9 +316,15 @@ const UDS_NRCS: { [nrc: number]: string } = {
   0x78: 'requestCorrectlyReceived-ResponsePending'
 };
 
+// Largest reassembled UDS payload we accept. ISO 15765-2's 32-bit FF_DL escape
+// allows ~4 GiB, but real diagnostic transfers are orders of magnitude smaller;
+// an oversized FF in a log is corruption or a crafted file.
+const MAX_TP_PAYLOAD = 16 * 1024 * 1024;
+
 // Per channel+direction ISO-TP reassembly stream.
 interface TpStream {
-  buffer:     Buffer;
+  chunks:     Buffer[];   // payload chunks accumulated so far, concatenated once on completion
+  receivedLen: number;    // total payload bytes across all chunks
   targetLen:  number;
   active:     boolean;
   expectedSN: number; // next expected Consecutive Frame sequence number (0–15, wraps)
@@ -348,7 +354,7 @@ export class UdsReconstructor {
     const key = channel + ':' + dir;
     let s = this.streams.get(key);
     if (!s) {
-      s = { buffer: Buffer.alloc(0), targetLen: 0, active: false, expectedSN: 1 };
+      s = { chunks: [], receivedLen: 0, targetLen: 0, active: false, expectedSN: 1 };
       this.streams.set(key, s);
     }
     return s;
@@ -407,11 +413,22 @@ export class UdsReconstructor {
         len    = data.readUInt32BE(2);
         pciLen = 6;
       }
+      if (len > MAX_TP_PAYLOAD) {
+        // Too big to be a real transfer (FF_DL escape claims up to ~4 GiB):
+        // refuse reassembly so every CF stays an orphan and the payload
+        // can never accumulate. snError marks "did not enter reassembly".
+        stream.active     = false;
+        stream.chunks     = [];
+        stream.receivedLen = 0;
+        stream.targetLen  = 0;
+        return { otpType: 'FF', pciLen, payloadLen: Math.max(0, data.length - pciLen), snError: true };
+      }
       const payload = data.slice(pciLen);
-      stream.buffer     = payload;
-      stream.targetLen  = len;
-      stream.active     = true;
-      stream.expectedSN = 1;
+      stream.chunks      = [payload];
+      stream.receivedLen = payload.length;
+      stream.targetLen   = len;
+      stream.active      = true;
+      stream.expectedSN  = 1;
       return { otpType: 'FF', pciLen, payloadLen: payload.length };
     }
 
@@ -423,20 +440,23 @@ export class UdsReconstructor {
       }
       if (sn !== stream.expectedSN) {
         // Sequence break: abort reassembly rather than silently concatenate garbage.
-        stream.active    = false;
-        stream.buffer    = Buffer.alloc(0);
-        stream.targetLen = 0;
+        stream.active      = false;
+        stream.chunks      = [];
+        stream.receivedLen = 0;
+        stream.targetLen   = 0;
         return { otpType: 'CF', pciLen: 1, payloadLen: Math.max(0, data.length - 1), snError: true };
       }
-      const remaining = stream.targetLen - stream.buffer.length;
+      const remaining = stream.targetLen - stream.receivedLen;
       const realLen   = Math.max(0, Math.min(data.length - 1, remaining));
-      stream.buffer     = Buffer.concat([stream.buffer, data.slice(1)]);
+      stream.chunks.push(data.slice(1));
+      stream.receivedLen += data.length - 1;
       stream.expectedSN = (stream.expectedSN + 1) & 0x0F;
-      if (stream.buffer.length >= stream.targetLen) {
-        const payload = stream.buffer.slice(0, stream.targetLen);
-        stream.active    = false;
-        stream.buffer    = Buffer.alloc(0);
-        stream.targetLen = 0;
+      if (stream.receivedLen >= stream.targetLen) {
+        const payload = Buffer.concat(stream.chunks).slice(0, stream.targetLen);
+        stream.active      = false;
+        stream.chunks      = [];
+        stream.receivedLen = 0;
+        stream.targetLen   = 0;
         const udsType: 'req' | 'pos' | 'neg' = isReq ? 'req' : (payload[0] === 0x7F ? 'neg' : 'pos');
         return { otpType: 'CF', completedUds: complete(payload, udsType), pciLen: 1, payloadLen: realLen };
       }

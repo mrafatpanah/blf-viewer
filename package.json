@@ -1,22 +1,43 @@
 {
   "name": "blf-viewer",
   "displayName": "BLF Viewer",
-  "description": "View Binary Logging Format (BLF) CAN bus files",
-  "version": "1.4.2",
+  "description": "BLF CAN log viewer with DBC signal decode, UDS/ISO-TP diagnostics and CDD support — offline, no telemetry",
+  "version": "1.5.0",
   "engines": {
     "vscode": "^1.109.0"
   },
   "categories": [
+    "Visualization",
+    "Data Science",
     "Other"
   ],
   "keywords": [
     "BLF",
+    "CAN",
+    "CAN FD",
     "CAN bus",
-    "automotive",
-    "binary logging",
+    "CANalyzer",
+    "CANoe",
+    "PCAN",
+    "CANedge",
     "Vector",
-    "dbc"
+    "DBC",
+    "CDD",
+    "UDS",
+    "ISO-TP",
+    "ISO 15765",
+    "diagnostics",
+    "ECU",
+    "log viewer",
+    "bus analyzer",
+    "automotive",
+    "embedded",
+    "binary logging"
   ],
+  "galleryBanner": {
+    "color": "#0B2E3E",
+    "theme": "dark"
+  },
   "icon": "images/icon.png",
   "publisher": "mafatpanah",
   "repository": {
