@@ -65,6 +65,24 @@ The workflow builds the extension, packages the `.vsix`, creates the GitHub
 Release, and uploads the artifact. If the release already exists, it replaces
 the existing `.vsix` asset.
 
+If the repository secrets `OVSX_PAT` and/or `VSCE_PAT` are configured, the
+workflow also automatically publishes the packaged VSIX to Open VSX and the
+VS Code Marketplace.
+
+## Registry Credentials
+
+- **Open VSX**: Generate an Access Token at [open-vsx.org](https://open-vsx.org/)
+  (User Settings -> Access Tokens). Ensure the Eclipse Publisher Agreement is
+  signed. Add the token to GitHub repository secrets as `OVSX_PAT`.
+- **VS Code Marketplace**: Generate a Personal Access Token in Azure DevOps
+  with `Marketplace (Manage)` scope. Add to GitHub repository secrets as `VSCE_PAT`.
+
+To manually publish a release asset to Open VSX:
+
+```bash
+npx ovsx publish blf-viewer-1.4.1.vsix -p "$OVSX_PAT"
+```
+
 ## Recovery
 
 - If validation fails before tagging, fix it through another pull request.

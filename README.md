@@ -1,5 +1,9 @@
 # BLF Viewer
 
+[![Visual Studio Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/mafatpanah.blf-viewer?logo=visual-studio-code&label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=mafatpanah.blf-viewer)
+[![Open VSX Version](https://img.shields.io/open-vsx/v/mafatpanah/blf-viewer?logo=eclipse&label=Open%20VSX)](https://open-vsx.org/extension/mafatpanah/blf-viewer)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 View and analyze **Binary Logging Format (BLF)** CAN bus log files directly in VS Code — no external tools required.
 
 BLF is the native recording format of Vector CANalyzer, CANoe, and related automotive diagnostic tools. This extension lets you inspect `.blf` files as a structured, filterable table without leaving your editor.
