@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import * as zlib from 'zlib';
 import { BLFReader } from '../blf-parser';
 
 function writeTemp(name: string, buf: Buffer): string {
@@ -17,8 +18,11 @@ function fileHeader(): Buffer {
   const b = Buffer.alloc(144, 0);
   b.write('LOGG', 0, 'ascii');
   b.writeUInt32LE(144, 4);
-  b.writeUInt16LE(2024, 40); b.writeUInt16LE(1, 42);
-  b.writeUInt16LE(1, 44);    b.writeUInt16LE(1, 46);
+  // start = 2024-01-01 00:00:00 UTC; stop = same, so no bounds warning fires.
+  for (const at of [40, 56]) {
+    b.writeUInt16LE(2024, at); b.writeUInt16LE(1, at + 2);
+    b.writeUInt16LE(1, at + 4);    b.writeUInt16LE(1, at + 6);
+  }
   return b;
 }
 
@@ -125,5 +129,44 @@ suite('BLFReader header and object bounds', () => {
     const messages = await reader.parse();
     assert.strictEqual(messages.length, 204);
     assert.deepStrictEqual(reader.getErrors(), []);
+  });
+});
+
+// ZLIB_DEFLATE (method 2) LOG_CONTAINER whose compressed body is `compressed`
+// and which reports `uncompressedSize` in its header.
+function containerObjZlib(compressed: Buffer, uncompressedSize: number): Buffer {
+  const body = Buffer.alloc(16, 0);
+  body.writeUInt16LE(2, 0);                    // ZLIB_DEFLATE
+  body.writeUInt32LE(uncompressedSize, 8);     // uncompressed size
+  return Buffer.concat([objHeader(16 + 16 + compressed.length, 10), body, compressed]);
+}
+
+suite('decompression output cap', () => {
+  // 64 KiB of zeros compresses to ~a hundred bytes and contains no LOBJ
+  // markers, so a container holding it parses to zero messages.
+  const bombPayload = zlib.deflateSync(Buffer.alloc(64 * 1024));
+
+  test('container above the cap is rejected, not allocated', async () => {
+    const buf = fullFile(containerObjZlib(bombPayload, 64 * 1024));
+    const p = writeTemp('bomb.blf', buf);
+    const reader = new BLFReader(p, { maxContainerBytes: 1024 });
+    const messages = await reader.parse();
+    assert.deepStrictEqual(messages, []);
+    assert.match(reader.getErrors().join('\n'), /Container parse error/);
+  });
+
+  test('same payload under the default cap parses without errors', async () => {
+    const buf = fullFile(containerObjZlib(bombPayload, 64 * 1024));
+    const p = writeTemp('bomb-ok.blf', buf);
+    const reader = new BLFReader(p);
+    const messages = await reader.parse();
+    assert.deepStrictEqual(messages, []);
+    assert.deepStrictEqual(reader.getErrors(), []);
+  });
+
+  test('default cap does not affect the valid fixture', async () => {
+    const reader = new BLFReader(FIXTURE);
+    const messages = await reader.parse();
+    assert.strictEqual(messages.length, 204);
   });
 });

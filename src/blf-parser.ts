@@ -9,6 +9,11 @@ type TSystemTime = [number, number, number, number, number, number, number, numb
 const FILE_HEADER_SIZE = 144;
 const OBJ_HEADER_BASE_SIZE = 16;
 
+// Per-container decompression ceiling. Real BLF containers are small (Vector
+// tools write ~128 KiB uncompressed chunks); 256 MiB is far above any
+// legitimate container while still bounding a crafted decompression bomb.
+const MAX_CONTAINER_UNCOMPRESSED = 256 * 1024 * 1024;
+
 // Object type constants
 const CAN_MESSAGE = 1;
 const LOG_CONTAINER = 10;
@@ -182,13 +187,15 @@ export function canFdDlcToLength(dlc: number): number {
 // BLF Reader class
 export class BLFReader {
   private filePath: string;
+  private maxContainerBytes: number;
   private header: FileHeader | null = null;
   private messages: CANMessage[] = [];
   private parseErrors: string[] = [];
   private objectTail: Buffer = Buffer.alloc(0);
 
-  constructor(filePath: string) {
+  constructor(filePath: string, options?: { maxContainerBytes?: number }) {
     this.filePath = filePath;
+    this.maxContainerBytes = options?.maxContainerBytes ?? MAX_CONTAINER_UNCOMPRESSED;
   }
 
   async parse(): Promise<CANMessage[]> {
@@ -407,11 +414,12 @@ export class BLFReader {
   }
 
   private decompressData(data: Buffer): Promise<Buffer<ArrayBufferLike>> {
+    const opts = { maxOutputLength: this.maxContainerBytes };
     return new Promise((resolve, reject) => {
-      zlib.inflate(data, (err, result) => {
+      zlib.inflate(data, opts, (err, result) => {
         if (err) {
           // Try inflateRaw as fallback
-          zlib.inflateRaw(data, (err2, result2) => {
+          zlib.inflateRaw(data, opts, (err2, result2) => {
             if (err2) { reject(err); }
             else { resolve(result2 as Buffer<ArrayBufferLike>); }
           });
