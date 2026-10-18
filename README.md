@@ -1,6 +1,6 @@
 # BLF Viewer
 
-[![Visual Studio Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/mafatpanah.blf-viewer?logo=visual-studio-code&label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=mafatpanah.blf-viewer)
+[![VS Marketplace Version](https://vsmarketplacebadges.dev/version-short/mafatpanah.blf-viewer.svg)](https://marketplace.visualstudio.com/items?itemName=mafatpanah.blf-viewer)
 [![Open VSX Version](https://img.shields.io/open-vsx/v/mafatpanah/blf-viewer?logo=eclipse&label=Open%20VSX)](https://open-vsx.org/extension/mafatpanah/blf-viewer)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -201,6 +201,10 @@ This extension does not contribute any configurable settings.
 ---
 
 ## Release Notes
+
+### 1.4.2
+
+Now on Open VSX. Faster scrolling on large files, richer **Copy selection as CSV** (DBC name, diagnostic and signal columns, proper quoting), and clear warnings for corrupt BLF headers instead of wrong timestamps.
 
 ### 1.4.1
 

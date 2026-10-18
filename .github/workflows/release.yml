@@ -20,7 +20,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'  # ovsx 1.3 and vsce 4 need Node >= 22
           cache: 'npm'
 
       - name: Install dependencies
@@ -30,7 +30,7 @@ jobs:
         run: npm run package
 
       - name: Package VSIX
-        run: npx @vscode/vsce package --no-dependencies
+        run: npx --yes @vscode/vsce@4.0.0 package --no-dependencies
 
       - name: Create GitHub Release
         run: |
@@ -46,10 +46,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      # --skip-duplicate keeps a job rerun from failing on an already-published version.
       - name: Publish to Open VSX
         if: ${{ env.OVSX_PAT != '' }}
-        run: npx --yes ovsx publish *.vsix -p "$OVSX_PAT"
+        run: npx --yes ovsx@1.3.0 publish *.vsix --skip-duplicate -p "$OVSX_PAT"
 
       - name: Publish to VS Code Marketplace
         if: ${{ env.VSCE_PAT != '' }}
-        run: npx --yes @vscode/vsce publish --packagePath *.vsix -p "$VSCE_PAT"
+        run: npx --yes @vscode/vsce@4.0.0 publish --packagePath *.vsix --skip-duplicate -p "$VSCE_PAT"
