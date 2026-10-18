@@ -51,6 +51,19 @@ suite('BLF parser', () => {
 	});
 });
 
+suite('CAN_ERROR_EXT direction parity (upstream sets no is_rx → default true)', () => {
+	test('error frames report isRx true (no direction bit in <HHLBBBxLLH2x8s)', () => {
+		assert.strictEqual(parseCanErrorExt().isRx, true);
+	});
+
+	test('error frame id and data follow the python-can struct offsets', () => {
+		const msg = parseCanErrorExt();
+		assert.strictEqual(msg.isErrorFrame, true);
+		// frameLength decoy 0xdeadbeef must NOT leak into the id (regression pin for #13)
+		assert.notStrictEqual(msg.arbitrationId, 0xdeadbeef & 0x1FFFFFFF);
+	});
+});
+
 suite('BLF host filters', () => {
 	test('filters messages by contiguous payload byte sequence', () => {
 		const messages = [
