@@ -24,7 +24,7 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
     <span class="topbar-time" id="topTime">Parsing…</span>
     <span class="topbar-space"></span>
     <button class="btn" id="btnCols" title="Show/hide columns">⊞ Columns</button>
-    <button class="btn active" id="btnDetail">⊟ Detail</button>
+    <button class="btn active" id="btnDetail" aria-pressed="true">⊟ Detail</button>
   </div>
 
   <!-- Stats strip -->
@@ -43,12 +43,12 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
     <span class="panel-label">Filter</span>
     <div class="search-wrap" id="filterIdWrap">
       <span class="search-icon">⌕</span>
-      <input type="text" class="filter-id" id="fId" placeholder="Filter by ID… (e.g. 1A3, 2B5@0)" autocomplete="off" spellcheck="false">
+      <input type="text" class="filter-id" id="fId" placeholder="Filter by ID… (e.g. 1A3, 2B5@0)" autocomplete="off" spellcheck="false" aria-label="Filter by CAN ID">
       <div class="filter-resize" id="filterResize" title="Resize ID filter"></div>
     </div>
     <div class="search-wrap data-search-wrap">
       <span class="search-icon">⌕</span>
-      <input type="text" class="filter-data" id="fData" placeholder="Data bytes…" autocomplete="off" spellcheck="false">
+      <input type="text" class="filter-data" id="fData" placeholder="Data bytes…" autocomplete="off" spellcheck="false" aria-label="Filter by data bytes">
     </div>
     <select id="fDir">
       <option value="">All Dir</option>
@@ -66,8 +66,8 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
     </select>
     <select id="fCh"><option value="">All Ch</option></select>
     <span class="toolbar-space"></span>
-    <span class="sel-count" id="selCount" style="display:none"></span>
-    <span class="result-count" id="rCount">—</span>
+    <span class="sel-count" id="selCount" style="display:none" aria-live="polite"></span>
+    <span class="result-count" id="rCount" aria-live="polite">—</span>
     <button class="btn" id="btnClear"><svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" style="vertical-align:middle;margin-right:2px"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg> Clear</button>
     <span style="width:1px;height:18px;background:var(--border);flex-shrink:0"></span>
     <button class="btn" id="btnImportDbc" title="Import DBC file">⊕ DBC</button>
@@ -87,7 +87,7 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
     <span class="panel-label">Search</span>
     <div class="search-wrap" id="searchIdWrap">
       <span class="search-icon">⌕</span>
-      <input type="text" class="filter-id" id="sId" placeholder="Search ID…" autocomplete="off" spellcheck="false">
+      <input type="text" class="filter-id" id="sId" placeholder="Search ID…" autocomplete="off" spellcheck="false" aria-label="Search within results">
       <div class="filter-resize" id="searchResize" title="Resize search ID field"></div>
     </div>
     <div class="search-wrap data-search-wrap">
@@ -160,7 +160,7 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
 <!-- Portals rendered into body so they escape stacking contexts -->
 <div class="ctx-menu"    id="ctxMenu"    tabindex="-1" style="display:none"></div>
 <div class="ctx-submenu" id="ctxSubmenu" tabindex="-1" style="display:none"></div>
-<div class="toast"       id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script nonce="${nonce}">${WEBVIEW_JS}</script>
 </body>
@@ -1108,6 +1108,7 @@ function showContextMenu(x, y, mi) {
     if (!m) return;
     detailPanel.classList.remove('hidden');
     document.getElementById('btnDetail').classList.add('active');
+    document.getElementById('btnDetail').setAttribute('aria-pressed', 'true');
     showDetail(m);
     closeCtxMenu();
   });
@@ -1435,6 +1436,7 @@ document.addEventListener('keydown', e => {
       e.preventDefault();
       detailPanel.classList.remove('open');
       document.getElementById('btnDetail').classList.remove('active');
+      document.getElementById('btnDetail').setAttribute('aria-pressed', 'false');
     }
     return;
   }
@@ -1782,6 +1784,8 @@ document.getElementById('btnClear').addEventListener('click', () => {
 document.getElementById('btnDetail').addEventListener('click', function() {
   detailPanel.classList.toggle('hidden');
   this.classList.toggle('active');
+  const pressed = this.classList.contains('active');
+  this.setAttribute('aria-pressed', pressed ? 'true' : 'false');
 });
 
 document.getElementById('btnImportDbc').addEventListener('click', () => {
