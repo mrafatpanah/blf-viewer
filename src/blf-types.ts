@@ -14,6 +14,19 @@ export interface SortState {
   dir: 'asc' | 'desc';
 }
 
+// Per-folder config (`.blfviewer.json`)
+export interface BlfViewerConfig {
+  dbc?: string[];   // globs relative to config's folder, e.g. ["*.dbc", "can/*.dbc"]
+  cdd?: string[];   // globs relative to config's folder
+}
+
+// Saved per-file view state (stored in workspaceState / localStorage)
+export interface ViewState {
+  filter?: FilterState;
+  sort?:   SortState;
+  cols?:   { key: string; visible: boolean; width: number }[];
+}
+
 // Messages sent from webview → host
 export type WebviewMessage =
   | { type: 'requestPage'; startIndex: number; count: number; filter: FilterState; sort: SortState; }
@@ -23,7 +36,8 @@ export type WebviewMessage =
   | { type: 'clearDbc' }
   | { type: 'openCddFile' }
   | { type: 'clearCdd' }
-  | { type: 'openInEditor'; indices: number[]; filter: FilterState; sort: SortState; };
+  | { type: 'openInEditor'; indices: number[]; filter: FilterState; sort: SortState; }
+  | { type: 'saveViewState'; state: ViewState; file: string; };
 
 // Decoded signal value from a DBC database
 export interface WireSignal {

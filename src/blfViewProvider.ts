@@ -5,7 +5,7 @@ import * as fs      from 'fs';
 import { BLFReader }                        from './blf-parser';
 import { applyFilter, applySort, findFirstMatchingIndex, findLastMatchingIndex, countMatches, toWire, reconstructUdsMessages, ViewCache } from './blf-host';
 import { getWebviewHtml, getNonce }         from './blf-webview';
-import { WebviewMessage }                   from './blf-types';
+import { WebviewMessage, BlfViewerConfig }           from './blf-types';
 import { parseDbcFile, DbcDatabase }        from './dbc-parser';
 import { parseCddFile, CddDatabase }        from './cdd-parser';
 
@@ -68,6 +68,39 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
         processedMessages = originalMessages;
       }
     };
+
+    // ── Auto-load DBC/CDD from .blfviewer.json ─────────────────────────────────
+    const folderUri = vscode.Uri.file(path.dirname(document.uri.fsPath));
+    try {
+      const configPath  = path.join(folderUri.fsPath, '.blfviewer.json');
+      const configRaw   = fs.readFileSync(configPath, 'utf8');
+      const config: BlfViewerConfig = JSON.parse(configRaw);
+      const autoDbcPaths = resolveGlobs(config.dbc ?? [], folderUri.fsPath);
+      const autoCddPaths = resolveGlobs(config.cdd ?? [], folderUri.fsPath);
+
+      for (const dbcPath of autoDbcPaths) {
+        try {
+          const text  = fs.readFileSync(dbcPath, 'utf8');
+          dbcDb       = parseDbcFile(text, path.basename(dbcPath));
+          dbcChannel  = null;
+          webviewPanel.webview.postMessage({
+            type: 'dbcLoaded', fileName: dbcDb.fileName, messageCount: dbcDb.messages.size,
+          });
+        } catch { /* skip individual DBC failure */ }
+      }
+
+      for (const cddPath of autoCddPaths) {
+        try {
+          const text = fs.readFileSync(cddPath, 'utf8');
+          cddDb      = parseCddFile(text, path.basename(cddPath));
+          rebuildProcessedMessages();
+          const active = cddDb.requestCanId !== null && cddDb.responseCanId !== null;
+          webviewPanel.webview.postMessage({
+            type: 'cddLoaded', fileName: cddDb.fileName, serviceCount: cddDb.services.size, active,
+          });
+        } catch { /* skip individual CDD failure */ }
+      }
+    } catch { /* No .blfviewer.json — silently skip */ }
 
     // Handle messages from the webview
     webviewPanel.webview.onDidReceiveMessage(async (req: WebviewMessage) => {
@@ -213,6 +246,11 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
         await vscode.window.showTextDocument(doc, { preview: true });
         return;
       }
+
+      if (req.type === 'saveViewState') {
+        await this.context.workspaceState.update(req.file + '.viewState', req.state);
+        return;
+      }
     });
 
     webviewPanel.onDidDispose(() => {
@@ -283,4 +321,35 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
       return null;
     }
   }
+}
+
+// ── .blfviewer.json glob resolver ────────────────────────────────────────────
+
+/** Simple glob match: `*` matches any chars except `/`; `?` matches one non-`/`. */
+function matchGlob(pattern: string, name: string): boolean {
+  const reStr = '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]') + '$';
+  return new RegExp(reStr).test(name);
+}
+
+/** Resolve glob patterns relative to `baseDir`, return absolute file paths. */
+function resolveGlobs(patterns: string[], baseDir: string): string[] {
+  const results: string[] = [];
+  for (const pat of patterns) {
+    const parts    = pat.split('/');
+    const fileName = parts[parts.length - 1]!;
+    const dirGlob  = parts.length > 1 ? parts.slice(0, -1).join('/') : '.';
+    const scanDir  = path.resolve(baseDir, dirGlob);
+    try {
+      const entries = fs.readdirSync(scanDir);
+      for (const entry of entries) {
+        const full = path.join(scanDir, entry);
+        if (matchGlob(fileName, entry) && fs.statSync(full).isFile()) {
+          results.push(full);
+        }
+      }
+    } catch {
+      // Skip directories that don't exist or can't be read
+    }
+  }
+  return results;
 }
