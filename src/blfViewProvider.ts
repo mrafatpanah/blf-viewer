@@ -231,9 +231,25 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
     filePath: string,
     panel: vscode.WebviewPanel
   ) {
+    const controller = new AbortController();
+
     try {
       const reader   = new BLFReader(filePath);
-      const messages = await reader.parse();
+      const messages = await vscode.window.withProgress({
+        location:      vscode.ProgressLocation.Notification,
+        title:         `Parsing ${path.basename(filePath)}…`,
+        cancellable:   true,
+      }, async (progress, token) => {
+        // Forward VS Code's cancellation token to AbortController
+        token.onCancellationRequested(() => controller.abort());
+        let lastPct = 0;
+        return await reader.parse(controller.signal, ratio => {
+          const pct = Math.floor(ratio * 100);
+          const inc = pct - lastPct;
+          if (inc > 0) { progress.report({ increment: inc }); }
+          lastPct = pct;
+        });
+      });
       const header   = reader.getHeader();
       const errors   = reader.getErrors();
 
@@ -258,6 +274,8 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
 
       return messages;
     } catch (err) {
+      // Don't show an error notification when the user explicitly cancels
+      if (err instanceof Error && err.name === 'AbortError') { return null; }
       panel.webview.postMessage({
         type:    'error',
         message: err instanceof Error ? err.message : String(err),
