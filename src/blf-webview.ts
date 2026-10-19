@@ -158,8 +158,8 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
 </div><!-- /.app -->
 
 <!-- Portals rendered into body so they escape stacking contexts -->
-<div class="ctx-menu"    id="ctxMenu"    tabindex="-1" style="display:none"></div>
-<div class="ctx-submenu" id="ctxSubmenu" tabindex="-1" style="display:none"></div>
+<div class="ctx-menu"    id="ctxMenu"    role="menu" tabindex="-1" style="display:none"></div>
+<div class="ctx-submenu" id="ctxSubmenu" role="menu" tabindex="-1" style="display:none"></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script nonce="${nonce}">${WEBVIEW_JS}</script>
@@ -322,7 +322,7 @@ const CSS = `
   /* Resize handle */
   .th-resize { position: absolute; right: 0; top: 0; bottom: 0; width: 5px;
     cursor: col-resize; background: transparent; z-index: 1; transition: background .12s; }
-  .th-resize:hover, .th-resize.active { background: var(--accent); }
+  .th-resize:hover, .th-resize.active, .th-resize:focus { background: var(--accent); outline: none; }
 
   /* Column DnD states */
   .th-inner.dragging  { opacity: .35; }
@@ -407,8 +407,10 @@ const CSS = `
   @keyframes ctxIn { from { opacity:0; transform:scale(.97); } to { opacity:1; transform:scale(1); } }
   .ctx-item { display: flex; align-items: center; gap: 8px;
     padding: 6px 12px; cursor: pointer; color: var(--fg); user-select: none; white-space: nowrap; }
-  .ctx-item:hover       { background: var(--hover); color: var(--accent); }
-  .ctx-item.danger:hover{ background: rgba(241,76,76,.1); color: var(--red); }
+  .ctx-item:hover,
+  .ctx-item:focus       { background: var(--hover); color: var(--accent); outline: none; }
+  .ctx-item.danger:hover,
+  .ctx-item.danger:focus{ background: rgba(241,76,76,.1); color: var(--red); }
   .ctx-sep   { height: 1px; background: var(--border); margin: 4px 0; }
   .ctx-label { padding: 4px 12px 2px; font-size: 10px; text-transform: uppercase;
     letter-spacing: .06em; color: var(--fg2); cursor: default; }
@@ -422,7 +424,8 @@ const CSS = `
     animation: ctxIn .08s ease-out; }
   .color-swatch { width: 22px; height: 22px; border-radius: 4px; cursor: pointer;
     border: 2px solid transparent; transition: transform .1s, border-color .1s; }
-  .color-swatch:hover { transform: scale(1.2); border-color: var(--fg); }
+  .color-swatch:hover,
+  .color-swatch:focus { transform: scale(1.2); border-color: var(--fg); outline: none; }
 
   /* Loading overlay */
   .overlay { position: absolute; inset: 0; display: flex; flex-direction: column;
@@ -634,8 +637,13 @@ function buildHeader() {
       const ci = parseInt(e.currentTarget.dataset.ci, 10);
       const col = cols[ci];
       if (!col || col.flex) return;
-      if (e.key === 'ArrowLeft')  { e.preventDefault(); col.width = Math.max(col.minWidth, col.width - 10); syncHeaderWidths(); renderViewport(); }
-      if (e.key === 'ArrowRight') { e.preventDefault(); col.width = Math.min(500, col.width + 10); syncHeaderWidths(); renderViewport(); }
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      e.stopPropagation(); // don't let the global row-nav handler also move row selection
+      if (e.key === 'ArrowLeft')  { col.width = Math.max(col.minWidth, col.width - 10); }
+      if (e.key === 'ArrowRight') { col.width = Math.min(500, col.width + 10); }
+      syncHeaderWidths();
+      renderViewport();
     });
 
     row.appendChild(th);
@@ -714,7 +722,7 @@ function autoFitColumn(ci) {
     for (const r of pageRows) {
       let val;
       switch (col.key) {
-        case 'i':       val = r.i != null ? String(r.i + 1); break;
+        case 'i':       val = r.i != null ? String(r.i + 1) : ''; break;
         case 't':       val = r.t ?? ''; break;
         case 'utc':     val = r.utc ?? ''; break;
         case 'id':      val = r.id ?? ''; break;
@@ -1152,11 +1160,18 @@ function showContextMenu(x, y, mi) {
       '<div class="ctx-item danger" id="cxClearClr">' +
         '<span class="ctx-icon">' + ico('x') + '</span>Remove color</div>' : '');
 
+  // Make items focusable/announced for keyboard nav and screen readers
+  ctxMenu.querySelectorAll('.ctx-item').forEach(el => {
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('role', 'menuitem');
+  });
+
   // Position (keep on screen)
   ctxMenu.style.display = 'block';
   const mw = ctxMenu.offsetWidth, mh = ctxMenu.offsetHeight;
   ctxMenu.style.left = Math.min(x, window.innerWidth  - mw - 8) + 'px';
   ctxMenu.style.top  = Math.min(y, window.innerHeight - mh - 8) + 'px';
+  ctxMenu.querySelector('.ctx-item')?.focus();
 
   // ── Wire up items ──────────────────────────────────────────────
 
@@ -1267,6 +1282,9 @@ function showColorSubmenu(anchor, mi) {
     const el = document.createElement('div');
     el.className = 'color-swatch';
     el.title     = sw.name;
+    el.tabIndex  = 0;
+    el.setAttribute('role', 'menuitem');
+    el.setAttribute('aria-label', sw.name);
     el.style.background = sw.bg;
     el.addEventListener('click', () => {
       const targets = selectedSet.size > 1 ? [...selectedSet] : [mi];
@@ -1281,6 +1299,9 @@ function showColorSubmenu(anchor, mi) {
   const clr = document.createElement('div');
   clr.className = 'color-swatch';
   clr.title = 'Clear color';
+  clr.tabIndex = 0;
+  clr.setAttribute('role', 'menuitem');
+  clr.setAttribute('aria-label', 'Clear color');
   clr.style.cssText = 'background:transparent;border:2px dashed var(--border)';
   clr.addEventListener('click', () => {
     const targets = selectedSet.size > 1 ? [...selectedSet] : [mi];
@@ -1290,6 +1311,7 @@ function showColorSubmenu(anchor, mi) {
   });
   ctxSubmenu.appendChild(clr);
 
+  ctxSubmenu.querySelector('.color-swatch')?.focus();
   positionSubmenu(anchor);
 }
 
@@ -1307,11 +1329,14 @@ function showGroupSubmenu(anchor) {
   opts.forEach(o => {
     const el = document.createElement('div');
     el.className = 'ctx-item';
+    el.tabIndex  = 0;
+    el.setAttribute('role', 'menuitem');
     el.innerHTML = esc(o.label) + (groupBy === o.key ? ' ' + ico('check') : '');
     el.addEventListener('click', () => { setGroupBy(o.key); closeCtxMenu(); });
     ctxSubmenu.appendChild(el);
   });
 
+  ctxSubmenu.querySelector('.ctx-item')?.focus();
   positionSubmenu(anchor);
 }
 
@@ -1399,19 +1424,26 @@ function copySelectedAsTsv() {
   copyText([showHeaders.join('\t'), ...body].join('\n'));
 }
 
-// Context menu keyboard nav — intercept events when menu is visible
-ctxMenu.addEventListener('keydown', e => {
-  const items = [...ctxMenu.querySelectorAll('.ctx-item, .ctx-sub-parent')];
+// Context menu keyboard nav — intercept events in either menu/submenu
+function onCtxMenuKeydown(e) {
+  const root  = e.currentTarget;
+  const items = [...root.querySelectorAll('.ctx-item, .color-swatch')];
   if (items.length === 0) return;
   let idx = items.indexOf(document.activeElement);
 
+  // Always stop propagation while the menu is open — otherwise arrow keys
+  // also reach the global row-navigation handler underneath.
+  e.stopPropagation();
+
   switch (e.key) {
     case 'ArrowDown':
+    case 'ArrowRight':
       e.preventDefault();
       idx = (idx + 1) % items.length;
       items[idx].focus();
       break;
     case 'ArrowUp':
+    case 'ArrowLeft':
       e.preventDefault();
       idx = (idx - 1 + items.length) % items.length;
       items[idx].focus();
@@ -1434,7 +1466,9 @@ ctxMenu.addEventListener('keydown', e => {
       closeCtxMenu();
       break;
   }
-});
+}
+ctxMenu.addEventListener('keydown',    onCtxMenuKeydown);
+ctxSubmenu.addEventListener('keydown', onCtxMenuKeydown);
 
 document.addEventListener('keydown', e => {
   const tag = e.target.tagName;
@@ -1501,9 +1535,9 @@ document.addEventListener('keydown', e => {
 
   // Escape — close detail panel
   if (e.key === 'Escape') {
-    if (detailPanel.classList.contains('open')) {
+    if (!detailPanel.classList.contains('hidden')) {
       e.preventDefault();
-      detailPanel.classList.remove('open');
+      detailPanel.classList.add('hidden');
       document.getElementById('btnDetail').classList.remove('active');
       document.getElementById('btnDetail').setAttribute('aria-pressed', 'false');
     }

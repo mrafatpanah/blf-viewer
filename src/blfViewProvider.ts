@@ -78,8 +78,11 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
       const autoDbcPaths = resolveGlobs(config.dbc ?? [], folderUri.fsPath);
       const autoCddPaths = resolveGlobs(config.cdd ?? [], folderUri.fsPath);
 
+      const MAX_AUTOLOAD_BYTES = 10 * 1024 * 1024; // 10 MB — same cap as manual import
+
       for (const dbcPath of autoDbcPaths) {
         try {
+          if (fs.statSync(dbcPath).size > MAX_AUTOLOAD_BYTES) { continue; }
           const text  = fs.readFileSync(dbcPath, 'utf8');
           dbcDb       = parseDbcFile(text, path.basename(dbcPath));
           dbcChannel  = null;
@@ -91,6 +94,7 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
 
       for (const cddPath of autoCddPaths) {
         try {
+          if (fs.statSync(cddPath).size > MAX_AUTOLOAD_BYTES) { continue; }
           const text = fs.readFileSync(cddPath, 'utf8');
           cddDb      = parseCddFile(text, path.basename(cddPath));
           rebuildProcessedMessages();
@@ -331,14 +335,23 @@ function matchGlob(pattern: string, name: string): boolean {
   return new RegExp(reStr).test(name);
 }
 
-/** Resolve glob patterns relative to `baseDir`, return absolute file paths. */
+/**
+ * Resolve glob patterns relative to `baseDir`, return absolute file paths.
+ * Config is auto-applied with no user confirmation, so patterns are confined
+ * to `baseDir` (no `..` escape) to avoid a committed `.blfviewer.json`
+ * silently reading files outside the folder it lives in.
+ */
 function resolveGlobs(patterns: string[], baseDir: string): string[] {
   const results: string[] = [];
+  const resolvedBase = path.resolve(baseDir) + path.sep;
   for (const pat of patterns) {
     const parts    = pat.split('/');
     const fileName = parts[parts.length - 1]!;
     const dirGlob  = parts.length > 1 ? parts.slice(0, -1).join('/') : '.';
     const scanDir  = path.resolve(baseDir, dirGlob);
+    if (scanDir + path.sep !== resolvedBase && !scanDir.startsWith(resolvedBase)) {
+      continue; // escapes baseDir — skip
+    }
     try {
       const entries = fs.readdirSync(scanDir);
       for (const entry of entries) {
