@@ -19,12 +19,12 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
 
   <!-- Top bar -->
   <div class="topbar">
-    <span class="topbar-icon">📡</span>
+    <span class="topbar-icon"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" class="topbar-svg"><path d="M8 1c-2 0-3.7.8-4.9 2.1l.7.7C4.7 2.6 6.2 2 8 2s3.3.6 4.2 1.8l.7-.7A6.7 6.7 0 0 0 8 1zM6.5 10a3.5 3.5 0 0 1 3 0l.5-1c-1.2-.7-2.8-.7-4 0l.5 1zM8 6c-.9 0-1.7.3-2.3.9l.7.7c.4-.4 1-.6 1.6-.6s1.2.2 1.6.6l.7-.7C9.7 6.3 8.9 6 8 6z"/></svg></span>
     <span class="topbar-title">${safeFileName}</span>
     <span class="topbar-time" id="topTime">Parsing…</span>
     <span class="topbar-space"></span>
     <button class="btn" id="btnCols" title="Show/hide columns">⊞ Columns</button>
-    <button class="btn active" id="btnDetail">⊟ Detail</button>
+    <button class="btn active" id="btnDetail" aria-pressed="true">⊟ Detail</button>
   </div>
 
   <!-- Stats strip -->
@@ -43,12 +43,12 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
     <span class="panel-label">Filter</span>
     <div class="search-wrap" id="filterIdWrap">
       <span class="search-icon">⌕</span>
-      <input type="text" class="filter-id" id="fId" placeholder="Filter by ID… (e.g. 1A3, 2B5@0)" autocomplete="off" spellcheck="false">
+      <input type="text" class="filter-id" id="fId" placeholder="Filter by ID… (e.g. 1A3, 2B5@0)" autocomplete="off" spellcheck="false" aria-label="Filter by CAN ID">
       <div class="filter-resize" id="filterResize" title="Resize ID filter"></div>
     </div>
     <div class="search-wrap data-search-wrap">
       <span class="search-icon">⌕</span>
-      <input type="text" class="filter-data" id="fData" placeholder="Data bytes…" autocomplete="off" spellcheck="false">
+      <input type="text" class="filter-data" id="fData" placeholder="Data bytes…" autocomplete="off" spellcheck="false" aria-label="Filter by data bytes">
     </div>
     <select id="fDir">
       <option value="">All Dir</option>
@@ -66,20 +66,20 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
     </select>
     <select id="fCh"><option value="">All Ch</option></select>
     <span class="toolbar-space"></span>
-    <span class="sel-count" id="selCount" style="display:none"></span>
-    <span class="result-count" id="rCount">—</span>
-    <button class="btn" id="btnClear">✕ Clear</button>
+    <span class="sel-count" id="selCount" style="display:none" aria-live="polite"></span>
+    <span class="result-count" id="rCount" aria-live="polite">—</span>
+    <button class="btn" id="btnClear"><svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" style="vertical-align:middle;margin-right:2px"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg> Clear</button>
     <span style="width:1px;height:18px;background:var(--border);flex-shrink:0"></span>
     <button class="btn" id="btnImportDbc" title="Import DBC file">⊕ DBC</button>
     <span class="dbc-badge" id="dbcBadge" style="display:none"></span>
     <select id="dbcChannel" style="display:none" title="Apply DBC to channel">
       <option value="">All Ch</option>
     </select>
-    <button class="btn" id="btnClearDbc" style="display:none" title="Remove DBC">✕</button>
+    <button class="btn" id="btnClearDbc" style="display:none" title="Remove DBC"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" style="vertical-align:middle"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg></button>
     <span style="width:1px;height:18px;background:var(--border);flex-shrink:0"></span>
     <button class="btn" id="btnImportCdd" title="Import CDD file">⊕ CDD</button>
     <span class="cdd-badge" id="cddBadge" style="display:none"></span>
-    <button class="btn" id="btnClearCdd" style="display:none" title="Remove CDD">✕</button>
+    <button class="btn" id="btnClearCdd" style="display:none" title="Remove CDD"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" style="vertical-align:middle"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg></button>
   </div>
 
   <!-- Search toolbar -->
@@ -87,7 +87,7 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
     <span class="panel-label">Search</span>
     <div class="search-wrap" id="searchIdWrap">
       <span class="search-icon">⌕</span>
-      <input type="text" class="filter-id" id="sId" placeholder="Search ID…" autocomplete="off" spellcheck="false">
+      <input type="text" class="filter-id" id="sId" placeholder="Search ID…" autocomplete="off" spellcheck="false" aria-label="Search within results">
       <div class="filter-resize" id="searchResize" title="Resize search ID field"></div>
     </div>
     <div class="search-wrap data-search-wrap">
@@ -109,10 +109,10 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
       <option value="TP">TP frames</option>
     </select>
     <select id="sCh"><option value="">Any Ch</option></select>
-    <button class="btn data-search-btn" id="btnSearchPrev" title="Previous match">◀</button>
-    <button class="btn data-search-btn" id="btnSearchNext" title="Next match">▶</button>
+    <button class="btn data-search-btn" id="btnSearchPrev" title="Previous match"><svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" style="vertical-align:middle"><path d="M10.5 3l-7 5 7 5V3z"/></svg></button>
+    <button class="btn data-search-btn" id="btnSearchNext" title="Next match"><svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" style="vertical-align:middle"><path d="M5.5 3l7 5-7 5V3z"/></svg></button>
     <span class="search-match-count" id="searchMatchCount"></span>
-    <button class="btn" id="btnClearSearch">✕</button>
+    <button class="btn" id="btnClearSearch"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" style="vertical-align:middle"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg></button>
   </div>
 
   <!-- Active grouping banner -->
@@ -158,9 +158,9 @@ export function getWebviewHtml(nonce: string, fileName: string): string {
 </div><!-- /.app -->
 
 <!-- Portals rendered into body so they escape stacking contexts -->
-<div class="ctx-menu"    id="ctxMenu"    style="display:none"></div>
-<div class="ctx-submenu" id="ctxSubmenu" style="display:none"></div>
-<div class="toast"       id="toast"></div>
+<div class="ctx-menu"    id="ctxMenu"    role="menu" tabindex="-1" style="display:none"></div>
+<div class="ctx-submenu" id="ctxSubmenu" role="menu" tabindex="-1" style="display:none"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script nonce="${nonce}">${WEBVIEW_JS}</script>
 </body>
@@ -322,7 +322,7 @@ const CSS = `
   /* Resize handle */
   .th-resize { position: absolute; right: 0; top: 0; bottom: 0; width: 5px;
     cursor: col-resize; background: transparent; z-index: 1; transition: background .12s; }
-  .th-resize:hover, .th-resize.active { background: var(--accent); }
+  .th-resize:hover, .th-resize.active, .th-resize:focus { background: var(--accent); outline: none; }
 
   /* Column DnD states */
   .th-inner.dragging  { opacity: .35; }
@@ -407,8 +407,10 @@ const CSS = `
   @keyframes ctxIn { from { opacity:0; transform:scale(.97); } to { opacity:1; transform:scale(1); } }
   .ctx-item { display: flex; align-items: center; gap: 8px;
     padding: 6px 12px; cursor: pointer; color: var(--fg); user-select: none; white-space: nowrap; }
-  .ctx-item:hover       { background: var(--hover); color: var(--accent); }
-  .ctx-item.danger:hover{ background: rgba(241,76,76,.1); color: var(--red); }
+  .ctx-item:hover,
+  .ctx-item:focus       { background: var(--hover); color: var(--accent); outline: none; }
+  .ctx-item.danger:hover,
+  .ctx-item.danger:focus{ background: rgba(241,76,76,.1); color: var(--red); }
   .ctx-sep   { height: 1px; background: var(--border); margin: 4px 0; }
   .ctx-label { padding: 4px 12px 2px; font-size: 10px; text-transform: uppercase;
     letter-spacing: .06em; color: var(--fg2); cursor: default; }
@@ -422,7 +424,8 @@ const CSS = `
     animation: ctxIn .08s ease-out; }
   .color-swatch { width: 22px; height: 22px; border-radius: 4px; cursor: pointer;
     border: 2px solid transparent; transition: transform .1s, border-color .1s; }
-  .color-swatch:hover { transform: scale(1.2); border-color: var(--fg); }
+  .color-swatch:hover,
+  .color-swatch:focus { transform: scale(1.2); border-color: var(--fg); outline: none; }
 
   /* Loading overlay */
   .overlay { position: absolute; inset: 0; display: flex; flex-direction: column;
@@ -608,7 +611,7 @@ function buildHeader() {
       '<span class="th-drag" title="Drag to reorder">⠿</span>' +
       '<span class="th-label">' + col.label + '</span>' +
       (col.sortable ? '<span class="sort-ind">' + arrow + '</span>' : '') +
-      '<div class="th-resize" data-ci="' + ci + '"></div>';
+      '<div class="th-resize" data-ci="' + ci + '" tabindex="0" role="separator" aria-label="Resize ' + col.label + ' column"></div>';
 
     // Sort click (skip if the event originated on the resize/drag handles)
     if (col.sortable) {
@@ -627,7 +630,21 @@ function buildHeader() {
     th.addEventListener('dragend',   onColDragEnd);
 
     // Column resize
-    th.querySelector('.th-resize').addEventListener('mousedown', onResizeStart);
+    const resizeHandle = th.querySelector('.th-resize');
+    resizeHandle.addEventListener('mousedown', onResizeStart);
+    resizeHandle.addEventListener('dblclick',  onColAutoFit);
+    resizeHandle.addEventListener('keydown', e => {
+      const ci = parseInt(e.currentTarget.dataset.ci, 10);
+      const col = cols[ci];
+      if (!col || col.flex) return;
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      e.stopPropagation(); // don't let the global row-nav handler also move row selection
+      if (e.key === 'ArrowLeft')  { col.width = Math.max(col.minWidth, col.width - 10); }
+      if (e.key === 'ArrowRight') { col.width = Math.min(500, col.width + 10); }
+      syncHeaderWidths();
+      renderViewport();
+    });
 
     row.appendChild(th);
   });
@@ -686,6 +703,56 @@ function onResizeEnd() {
   document.removeEventListener('mousemove', onResizeMove);
   document.removeEventListener('mouseup',   onResizeEnd);
   document.querySelectorAll('.th-resize').forEach(h => h.classList.remove('active'));
+}
+
+// Measure text width using transient offscreen element
+const _measEl = (() => { const e = document.createElement('span'); e.style.cssText = 'position:fixed;visibility:hidden;white-space:pre;font:var(--mono)'; document.body.appendChild(e); return e; })();
+function textWidth(s) { _measEl.textContent = String(s ?? ''); return _measEl.offsetWidth; }
+
+function autoFitColumn(ci) {
+  const col = cols[ci];
+  if (!col || col.flex) return;
+
+  // Measure header
+  const headerLabel = col.label || col.key;
+  let maxW = textWidth(headerLabel) + 20; // padding
+
+  // Measure data from page cache
+  for (const [, pageRows] of pageCache) {
+    for (const r of pageRows) {
+      let val;
+      switch (col.key) {
+        case 'i':       val = r.i != null ? String(r.i + 1) : ''; break;
+        case 't':       val = r.t ?? ''; break;
+        case 'utc':     val = r.utc ?? ''; break;
+        case 'id':      val = r.id ?? ''; break;
+        case 'name':    val = r.msgName ?? ''; break;
+        case 'type':    val = r.type ?? ''; break;
+        case 'dir':     val = r.dir ?? ''; break;
+        case 'ch':      val = r.ch != null ? String(r.ch) : ''; break;
+        case 'dlc':     val = r.dlc != null ? String(r.dlc) : ''; break;
+        case 'data':    val = r.data ?? ''; break;
+        case 'flags':   val = r.flags ?? ''; break;
+        case 'diagId':  val = r.diagId ?? ''; break;
+        case 'src':     val = r.src ?? ''; break;
+        case 'dst':     val = r.dst ?? ''; break;
+        case 'conn':    val = r.conn != null ? String(r.conn) : ''; break;
+        case 'service': val = r.service ?? ''; break;
+        default:        val = '';
+      }
+      const w = textWidth(val) + 14; // cell padding
+      if (w > maxW) maxW = w;
+    }
+  }
+
+  col.width = Math.max(col.minWidth, Math.ceil(Math.min(maxW, 500))); // cap at 500px
+  syncHeaderWidths();
+  renderViewport();
+}
+
+function onColAutoFit(e) {
+  const ci = parseInt(e.currentTarget.dataset.ci, 10);
+  if (ci >= 0) autoFitColumn(ci);
 }
 
 // Sync only header widths without rebuilding DOM
@@ -1050,10 +1117,10 @@ function showContextMenu(x, y, mi) {
   const hasClr = rowColors.has(mi);
 
   ctxMenu.innerHTML =
-    '<div class="ctx-label">📌 ' + label + '</div>' +
+    '<div class="ctx-label">' + ico('pin') + ' ' + label + '</div>' +
 
     '<div class="ctx-item" id="cxFilter">' +
-      '<span class="ctx-icon">🔍</span>Add to Filter</div>' +
+      '<span class="ctx-icon">' + ico('search') + '</span>Add to Filter</div>' +
 
     '<div class="ctx-item" id="cxDetail">' +
       '<span class="ctx-icon">⊟</span>Show Details</div>' +
@@ -1061,7 +1128,7 @@ function showContextMenu(x, y, mi) {
     '<div class="ctx-sep"></div>' +
 
     '<div class="ctx-item" id="cxColor">' +
-      '<span class="ctx-icon">🎨</span>Colorize<span class="ctx-arrow">›</span></div>' +
+      '<span class="ctx-icon">' + ico('palette') + '</span>Colorize<span class="ctx-arrow">›</span></div>' +
 
     '<div class="ctx-item" id="cxGroup">' +
       '<span class="ctx-icon">⊞</span>Group by…<span class="ctx-arrow">›</span></div>' +
@@ -1085,15 +1152,26 @@ function showContextMenu(x, y, mi) {
     '<div class="ctx-item" id="cxCopyCsv">' +
       '<span class="ctx-icon">⎘</span>Copy selection as CSV</div>' +
 
+    '<div class="ctx-sep"></div>' +
+    '<div class="ctx-item" id="cxOpenEditor">' +
+      '<span class="ctx-icon">⊞</span>' + (isMul ? 'Open ' + selectedSet.size + ' in editor' : 'Open in editor') + '</div>' +
+
     (hasClr ? '<div class="ctx-sep"></div>' +
       '<div class="ctx-item danger" id="cxClearClr">' +
-        '<span class="ctx-icon">✕</span>Remove color</div>' : '');
+        '<span class="ctx-icon">' + ico('x') + '</span>Remove color</div>' : '');
+
+  // Make items focusable/announced for keyboard nav and screen readers
+  ctxMenu.querySelectorAll('.ctx-item').forEach(el => {
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('role', 'menuitem');
+  });
 
   // Position (keep on screen)
   ctxMenu.style.display = 'block';
   const mw = ctxMenu.offsetWidth, mh = ctxMenu.offsetHeight;
   ctxMenu.style.left = Math.min(x, window.innerWidth  - mw - 8) + 'px';
   ctxMenu.style.top  = Math.min(y, window.innerHeight - mh - 8) + 'px';
+  ctxMenu.querySelector('.ctx-item')?.focus();
 
   // ── Wire up items ──────────────────────────────────────────────
 
@@ -1108,6 +1186,7 @@ function showContextMenu(x, y, mi) {
     if (!m) return;
     detailPanel.classList.remove('hidden');
     document.getElementById('btnDetail').classList.add('active');
+    document.getElementById('btnDetail').setAttribute('aria-pressed', 'true');
     showDetail(m);
     closeCtxMenu();
   });
@@ -1176,6 +1255,12 @@ function showContextMenu(x, y, mi) {
     renderViewport();
     closeCtxMenu();
   });
+
+  bind('cxOpenEditor', () => {
+    const items = selectedSet.size > 1 ? [...selectedSet] : [mi];
+    vscode.postMessage({ type: 'openInEditor', indices: items, filter: { ...filter }, sort: { ...sort } });
+    closeCtxMenu();
+  });
 }
 
 function bind(id, fn) {
@@ -1197,6 +1282,9 @@ function showColorSubmenu(anchor, mi) {
     const el = document.createElement('div');
     el.className = 'color-swatch';
     el.title     = sw.name;
+    el.tabIndex  = 0;
+    el.setAttribute('role', 'menuitem');
+    el.setAttribute('aria-label', sw.name);
     el.style.background = sw.bg;
     el.addEventListener('click', () => {
       const targets = selectedSet.size > 1 ? [...selectedSet] : [mi];
@@ -1211,6 +1299,9 @@ function showColorSubmenu(anchor, mi) {
   const clr = document.createElement('div');
   clr.className = 'color-swatch';
   clr.title = 'Clear color';
+  clr.tabIndex = 0;
+  clr.setAttribute('role', 'menuitem');
+  clr.setAttribute('aria-label', 'Clear color');
   clr.style.cssText = 'background:transparent;border:2px dashed var(--border)';
   clr.addEventListener('click', () => {
     const targets = selectedSet.size > 1 ? [...selectedSet] : [mi];
@@ -1220,6 +1311,7 @@ function showColorSubmenu(anchor, mi) {
   });
   ctxSubmenu.appendChild(clr);
 
+  ctxSubmenu.querySelector('.color-swatch')?.focus();
   positionSubmenu(anchor);
 }
 
@@ -1237,11 +1329,14 @@ function showGroupSubmenu(anchor) {
   opts.forEach(o => {
     const el = document.createElement('div');
     el.className = 'ctx-item';
-    el.textContent = o.label + (groupBy === o.key ? ' ✓' : '');
+    el.tabIndex  = 0;
+    el.setAttribute('role', 'menuitem');
+    el.innerHTML = esc(o.label) + (groupBy === o.key ? ' ' + ico('check') : '');
     el.addEventListener('click', () => { setGroupBy(o.key); closeCtxMenu(); });
     ctxSubmenu.appendChild(el);
   });
 
+  ctxSubmenu.querySelector('.ctx-item')?.focus();
   positionSubmenu(anchor);
 }
 
@@ -1283,7 +1378,172 @@ function closeCtxMenu() {
 document.addEventListener('mousedown', e => {
   if (!ctxMenu.contains(e.target) && !ctxSubmenu.contains(e.target)) closeCtxMenu();
 });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCtxMenu(); });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KEYBOARD NAVIGATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+function scrollToRow(idx) {
+  const rowTop = idx * ROW_H;
+  const st     = scroller.scrollTop;
+  const vh     = scroller.clientHeight;
+  if (rowTop < st)                         { scroller.scrollTop = rowTop; }
+  else if (rowTop + ROW_H > st + vh)       { scroller.scrollTop = rowTop - vh + ROW_H; }
+}
+
+function copySelectedAsTsv() {
+  const items = selectedSet.size > 0 ? [...selectedSet].sort((a,b)=>a-b) : [selectedRowI];
+  const showHeaders = cols.filter(c => c.visible).map(c => c.label);
+  const body = items.reduce((acc, mi) => {
+    const r = getCachedRow(mi);
+    if (!r) return acc;
+    const cells = cols.filter(c => c.visible).map(c => {
+      switch (c.key) {
+        case 'i':       return r.i != null ? String(r.i + 1) : '';
+        case 't':       return r.t ?? '';
+        case 'utc':     return r.utc ?? '';
+        case 'id':      return r.id ?? '';
+        case 'name':    return r.msgName ?? '';
+        case 'type':    return r.type ?? '';
+        case 'dir':     return r.dir ?? '';
+        case 'ch':      return r.ch != null ? String(r.ch) : '';
+        case 'dlc':     return r.dlc != null ? String(r.dlc) : '';
+        case 'data':    return r.data ?? '';
+        case 'flags':   return r.flags ?? '';
+        case 'diagId':  return r.diagId ?? '';
+        case 'src':     return r.src ?? '';
+        case 'dst':     return r.dst ?? '';
+        case 'conn':    return r.conn != null ? String(r.conn) : '';
+        case 'service': return r.service ?? '';
+        default: return '';
+      }
+    });
+    acc.push(cells.join('\t'));
+    return acc;
+  }, []);
+  copyText([showHeaders.join('\t'), ...body].join('\n'));
+}
+
+// Context menu keyboard nav — intercept events in either menu/submenu
+function onCtxMenuKeydown(e) {
+  const root  = e.currentTarget;
+  const items = [...root.querySelectorAll('.ctx-item, .color-swatch')];
+  if (items.length === 0) return;
+  let idx = items.indexOf(document.activeElement);
+
+  // Always stop propagation while the menu is open — otherwise arrow keys
+  // also reach the global row-navigation handler underneath.
+  e.stopPropagation();
+
+  switch (e.key) {
+    case 'ArrowDown':
+    case 'ArrowRight':
+      e.preventDefault();
+      idx = (idx + 1) % items.length;
+      items[idx].focus();
+      break;
+    case 'ArrowUp':
+    case 'ArrowLeft':
+      e.preventDefault();
+      idx = (idx - 1 + items.length) % items.length;
+      items[idx].focus();
+      break;
+    case 'Home':
+      e.preventDefault();
+      items[0].focus();
+      break;
+    case 'End':
+      e.preventDefault();
+      items[items.length - 1].focus();
+      break;
+    case 'Enter':
+    case ' ':
+      e.preventDefault();
+      if (document.activeElement) { document.activeElement.click(); }
+      break;
+    case 'Escape':
+      e.preventDefault();
+      closeCtxMenu();
+      break;
+  }
+}
+ctxMenu.addEventListener('keydown',    onCtxMenuKeydown);
+ctxSubmenu.addEventListener('keydown', onCtxMenuKeydown);
+
+document.addEventListener('keydown', e => {
+  const tag = e.target.tagName;
+
+  // Allow F3 / Ctrl+G through even from inputs
+  if (e.key === 'F3' || (e.ctrlKey || e.metaKey) && e.key === 'g') { /* fall through */ }
+  else if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') { return; }
+
+  // Ctrl+F / Cmd+F — focus ID filter
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+    e.preventDefault();
+    document.getElementById('fId').focus();
+    return;
+  }
+
+  // F3 / Shift+F3 — search next/prev
+  if (e.key === 'F3' && !e.shiftKey) { e.preventDefault(); runSearch('forward',  false); return; }
+  if (e.key === 'F3' &&  e.shiftKey) { e.preventDefault(); runSearch('backward', false); return; }
+
+  // Ctrl+G / Ctrl+Shift+G — search next/prev (vi-style)
+  if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
+    e.preventDefault();
+    runSearch(e.shiftKey ? 'backward' : 'forward', false);
+    return;
+  }
+
+  // All remaining handlers require no text input to be focused
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+  const moveTo = (next) => {
+    if (next < 0 || next >= totalFiltered || next === selectedRowI) return;
+    selectedSet.clear();
+    selectedRowI = next;
+    lastClickedI = next;
+    scrollToRow(next);
+    renderViewport();
+    updateSelCount();
+  };
+
+  // Ctrl+C — copy selected as TSV
+  if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+    if (selectedSet.size > 0 || selectedRowI >= 0) {
+      e.preventDefault();
+      copySelectedAsTsv();
+    }
+    return;
+  }
+
+  // Arrow / Page / Home / End navigation
+  if (e.key === 'ArrowDown')  { e.preventDefault(); moveTo(selectedRowI + 1); return; }
+  if (e.key === 'ArrowUp')    { e.preventDefault(); moveTo(selectedRowI - 1); return; }
+  if (e.key === 'PageDown')   { e.preventDefault(); moveTo(selectedRowI + Math.max(1, Math.floor(scroller.clientHeight / ROW_H) - 1)); return; }
+  if (e.key === 'PageUp')     { e.preventDefault(); moveTo(selectedRowI - Math.max(1, Math.floor(scroller.clientHeight / ROW_H) - 1)); return; }
+  if (e.key === 'Home')       { e.preventDefault(); moveTo(0); return; }
+  if (e.key === 'End')        { e.preventDefault(); moveTo(totalFiltered - 1); return; }
+
+  // Enter — open detail for selected row
+  if (e.key === 'Enter' && selectedRowI >= 0) {
+    e.preventDefault();
+    const m = getCachedRow(selectedRowI);
+    if (m) showDetail(m);
+    return;
+  }
+
+  // Escape — close detail panel
+  if (e.key === 'Escape') {
+    if (!detailPanel.classList.contains('hidden')) {
+      e.preventDefault();
+      detailPanel.classList.add('hidden');
+      document.getElementById('btnDetail').classList.remove('active');
+      document.getElementById('btnDetail').setAttribute('aria-pressed', 'false');
+    }
+    return;
+  }
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COPY HELPER
@@ -1627,6 +1887,8 @@ document.getElementById('btnClear').addEventListener('click', () => {
 document.getElementById('btnDetail').addEventListener('click', function() {
   detailPanel.classList.toggle('hidden');
   this.classList.toggle('active');
+  const pressed = this.classList.contains('active');
+  this.setAttribute('aria-pressed', pressed ? 'true' : 'false');
 });
 
 document.getElementById('btnImportDbc').addEventListener('click', () => {
@@ -1702,7 +1964,8 @@ window.addEventListener('message', ({ data: msg }) => {
     // Parse errors
     if (msg.errors?.length) {
       document.getElementById('errorsBar')?.classList.add('visible');
-      setText('errSummary', '⚠ ' + msg.errors.length + ' parse warning' + (msg.errors.length > 1 ? 's' : ''));
+      const errEl = document.getElementById('errSummary');
+      if (errEl) errEl.innerHTML = ico('warn') + ' ' + msg.errors.length + ' parse warning' + (msg.errors.length > 1 ? 's' : '');
       const el = document.getElementById('errList');
       if (el) el.innerHTML = msg.errors.map(esc).join('<br>');
     }
@@ -1714,7 +1977,7 @@ window.addEventListener('message', ({ data: msg }) => {
       const emp = document.createElement('div');
       emp.id = 'emptyState';
       emp.className = 'empty-state hidden';
-      emp.innerHTML = '<span style="font-size:28px">🔍</span><span>No messages match the current filter.</span>';
+      emp.innerHTML = '<span style="font-size:28px">' + ico('search') + '</span><span>No messages match the current filter.</span>';
       spacer.appendChild(emp);
     }
 
@@ -1784,7 +2047,7 @@ window.addEventListener('message', ({ data: msg }) => {
     overlay.innerHTML =
       '<div style="background:rgba(241,76,76,.1);border:1px solid rgba(241,76,76,.4);' +
       'border-radius:6px;padding:20px 24px;max-width:500px">' +
-      '<div style="color:#f48771;font-weight:600;margin-bottom:8px">⚠ Parse error</div>' +
+      '<div style="color:#f48771;font-weight:600;margin-bottom:8px">' + ico('warn') + ' Parse error</div>' +
       '<pre style="font-family:var(--mono);font-size:12px;white-space:pre-wrap">' + esc(msg.message) + '</pre>' +
       '</div>';
   }
@@ -1887,6 +2150,23 @@ window.addEventListener('message', ({ data: msg }) => {
 function esc(s) {
   if (typeof s !== 'string') return String(s ?? '');
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function ico(name) {
+  // 16×16 inline SVG icons matching VS Code codicon style.
+  // No external resources — CSP 'font-src: none' stays intact.
+  const ICONS = {
+    'antenna': '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 1c-2 0-3.7.8-4.9 2.1l.7.7C4.7 2.6 6.2 2 8 2s3.3.6 4.2 1.8l.7-.7A6.7 6.7 0 0 0 8 1zM6.5 10a3.5 3.5 0 0 1 3 0l.5-1c-1.2-.7-2.8-.7-4 0l.5 1zM8 6c-.9 0-1.7.3-2.3.9l.7.7c.4-.4 1-.6 1.6-.6s1.2.2 1.6.6l.7-.7C9.7 6.3 8.9 6 8 6zM3.5 4.5l.7.7A5.4 5.4 0 0 1 8 3c1.5 0 2.8.6 3.8 1.6l.7-.7A6.5 6.5 0 0 0 8 2a6.4 6.4 0 0 0-4.5 2.5z"/></svg>',
+    'x': '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>',
+    'search': '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M6.5.5a6 6 0 1 0 2.4 11.5l3.5 3.5 1.4-1.4-3.5-3.5A6 6 0 0 0 6.5.5zm0 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8z"/></svg>',
+    'warn': '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 1.5L1 14h14L8 1.5zM9 11H7v2h2v-2zm0-5v4H7V6h2z"/></svg>',
+    'check': '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M13.2 4.2a.7.7 0 0 1 0 1l-7 7a.7.7 0 0 1-1 0l-3.5-3.5a.7.7 0 0 1 1-1L5.7 10l6.5-6.5a.7.7 0 0 1 1 0z"/></svg>',
+    'pin': '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M9.828 1a1.5 1.5 0 0 1 2.657-.262l2.777 2.777a1.5 1.5 0 0 1-.262 2.657l-1.463.538.96 4.157-2.364 2.364-4.157-.96-.538 1.463a1.5 1.5 0 0 1-2.657.262L2 9.172a1.5 1.5 0 0 1 .262-2.657l1.463-.538L4.085 1.82l2.364-2.364 4.157.96.538-1.463L9.828 1z"/></svg>',
+    'palette': '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 1C4.1 1 1 4.1 1 8s3.1 7 7 7c.5 0 1-.4 1-1 0-.2-.1-.5-.1-.6-.2-.6.3-1.4 1-1.4h1c2.8 0 5-2.2 5-5 0-3.3-3.6-6-7-6zM4 9c-.6 0-1-.4-1-1s.4-1 1-1 1 .4 1 1-.4 1-1 1zm1.5-3c-.6 0-1-.4-1-1s.4-1 1-1 1 .4 1 1-.4 1-1 1zM11 9c-.6 0-1-.4-1-1s.4-1 1-1 1 .4 1 1-.4 1-1 1zm-.5-3c-.6 0-1-.4-1-1s.4-1 1-1 1 .4 1 1-.4 1-1 1z"/></svg>',
+    'next': '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M5.5 3l7 5-7 5V3z"/></svg>',
+    'prev': '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M10.5 3l-7 5 7 5V3z"/></svg>',
+  };
+  return ICONS[name] || '';
 }
 
 function csvCell(v) {

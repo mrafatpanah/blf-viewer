@@ -198,7 +198,10 @@ export class BLFReader {
     this.maxContainerBytes = options?.maxContainerBytes ?? MAX_CONTAINER_UNCOMPRESSED;
   }
 
-  async parse(): Promise<CANMessage[]> {
+  async parse(
+    signal?: AbortSignal,
+    onProgress?: (ratio: number) => void
+  ): Promise<CANMessage[]> {
     this.messages = [];
     this.parseErrors = [];
     this.objectTail = Buffer.alloc(0);
@@ -216,6 +219,11 @@ export class BLFReader {
       let offset = this.header.headerSize;
 
       while (offset < fileBuffer.length) {
+        signal?.throwIfAborted();
+
+        // Progress: bytes consumed / total file size
+        onProgress?.(offset / fileBuffer.length);
+
         const remaining = fileBuffer.length - offset;
         if (remaining < OBJ_HEADER_BASE_SIZE) { break; }
 
