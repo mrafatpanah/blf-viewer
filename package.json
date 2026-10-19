@@ -2,7 +2,7 @@
   "name": "blf-viewer",
   "displayName": "BLF Viewer",
   "description": "BLF CAN log viewer with DBC signal decode, UDS/ISO-TP diagnostics and CDD support — offline, no telemetry",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "engines": {
     "vscode": "^1.109.0"
   },
