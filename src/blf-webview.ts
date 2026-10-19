@@ -608,7 +608,7 @@ function buildHeader() {
       '<span class="th-drag" title="Drag to reorder">⠿</span>' +
       '<span class="th-label">' + col.label + '</span>' +
       (col.sortable ? '<span class="sort-ind">' + arrow + '</span>' : '') +
-      '<div class="th-resize" data-ci="' + ci + '"></div>';
+      '<div class="th-resize" data-ci="' + ci + '" tabindex="0" role="separator" aria-label="Resize ' + col.label + ' column"></div>';
 
     // Sort click (skip if the event originated on the resize/drag handles)
     if (col.sortable) {
@@ -627,7 +627,16 @@ function buildHeader() {
     th.addEventListener('dragend',   onColDragEnd);
 
     // Column resize
-    th.querySelector('.th-resize').addEventListener('mousedown', onResizeStart);
+    const resizeHandle = th.querySelector('.th-resize');
+    resizeHandle.addEventListener('mousedown', onResizeStart);
+    resizeHandle.addEventListener('dblclick',  onColAutoFit);
+    resizeHandle.addEventListener('keydown', e => {
+      const ci = parseInt(e.currentTarget.dataset.ci, 10);
+      const col = cols[ci];
+      if (!col || col.flex) return;
+      if (e.key === 'ArrowLeft')  { e.preventDefault(); col.width = Math.max(col.minWidth, col.width - 10); syncHeaderWidths(); renderViewport(); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); col.width = Math.min(500, col.width + 10); syncHeaderWidths(); renderViewport(); }
+    });
 
     row.appendChild(th);
   });
@@ -686,6 +695,56 @@ function onResizeEnd() {
   document.removeEventListener('mousemove', onResizeMove);
   document.removeEventListener('mouseup',   onResizeEnd);
   document.querySelectorAll('.th-resize').forEach(h => h.classList.remove('active'));
+}
+
+// Measure text width using transient offscreen element
+const _measEl = (() => { const e = document.createElement('span'); e.style.cssText = 'position:fixed;visibility:hidden;white-space:pre;font:var(--mono)'; document.body.appendChild(e); return e; })();
+function textWidth(s) { _measEl.textContent = String(s ?? ''); return _measEl.offsetWidth; }
+
+function autoFitColumn(ci) {
+  const col = cols[ci];
+  if (!col || col.flex) return;
+
+  // Measure header
+  const headerLabel = col.label || col.key;
+  let maxW = textWidth(headerLabel) + 20; // padding
+
+  // Measure data from page cache
+  for (const [, pageRows] of pageCache) {
+    for (const r of pageRows) {
+      let val;
+      switch (col.key) {
+        case 'i':       val = r.i != null ? String(r.i + 1); break;
+        case 't':       val = r.t ?? ''; break;
+        case 'utc':     val = r.utc ?? ''; break;
+        case 'id':      val = r.id ?? ''; break;
+        case 'name':    val = r.msgName ?? ''; break;
+        case 'type':    val = r.type ?? ''; break;
+        case 'dir':     val = r.dir ?? ''; break;
+        case 'ch':      val = r.ch != null ? String(r.ch) : ''; break;
+        case 'dlc':     val = r.dlc != null ? String(r.dlc) : ''; break;
+        case 'data':    val = r.data ?? ''; break;
+        case 'flags':   val = r.flags ?? ''; break;
+        case 'diagId':  val = r.diagId ?? ''; break;
+        case 'src':     val = r.src ?? ''; break;
+        case 'dst':     val = r.dst ?? ''; break;
+        case 'conn':    val = r.conn != null ? String(r.conn) : ''; break;
+        case 'service': val = r.service ?? ''; break;
+        default:        val = '';
+      }
+      const w = textWidth(val) + 14; // cell padding
+      if (w > maxW) maxW = w;
+    }
+  }
+
+  col.width = Math.max(col.minWidth, Math.ceil(Math.min(maxW, 500))); // cap at 500px
+  syncHeaderWidths();
+  renderViewport();
+}
+
+function onColAutoFit(e) {
+  const ci = parseInt(e.currentTarget.dataset.ci, 10);
+  if (ci >= 0) autoFitColumn(ci);
 }
 
 // Sync only header widths without rebuilding DOM
