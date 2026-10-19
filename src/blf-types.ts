@@ -22,7 +22,8 @@ export type WebviewMessage =
   | { type: 'setDbcChannel'; channel: number | null }
   | { type: 'clearDbc' }
   | { type: 'openCddFile' }
-  | { type: 'clearCdd' };
+  | { type: 'clearCdd' }
+  | { type: 'openInEditor'; indices: number[]; filter: FilterState; sort: SortState; };
 
 // Decoded signal value from a DBC database
 export interface WireSignal {

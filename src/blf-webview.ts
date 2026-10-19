@@ -1144,6 +1144,10 @@ function showContextMenu(x, y, mi) {
     '<div class="ctx-item" id="cxCopyCsv">' +
       '<span class="ctx-icon">⎘</span>Copy selection as CSV</div>' +
 
+    '<div class="ctx-sep"></div>' +
+    '<div class="ctx-item" id="cxOpenEditor">' +
+      '<span class="ctx-icon">⊞</span>' + (isMul ? 'Open ' + selectedSet.size + ' in editor' : 'Open in editor') + '</div>' +
+
     (hasClr ? '<div class="ctx-sep"></div>' +
       '<div class="ctx-item danger" id="cxClearClr">' +
         '<span class="ctx-icon">' + ico('x') + '</span>Remove color</div>' : '');
@@ -1234,6 +1238,12 @@ function showContextMenu(x, y, mi) {
     const targets = selectedSet.size > 1 ? [...selectedSet] : [mi];
     targets.forEach(i => rowColors.delete(i));
     renderViewport();
+    closeCtxMenu();
+  });
+
+  bind('cxOpenEditor', () => {
+    const items = selectedSet.size > 1 ? [...selectedSet] : [mi];
+    vscode.postMessage({ type: 'openInEditor', indices: items, filter: { ...filter }, sort: { ...sort } });
     closeCtxMenu();
   });
 }

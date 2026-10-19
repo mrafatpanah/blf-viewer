@@ -194,6 +194,25 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
         webviewPanel.webview.postMessage({ type: 'cddCleared' });
         return;
       }
+
+      if (req.type === 'openInEditor') {
+        const sorted   = viewCache.get(processedMessages, req.filter, req.sort);
+        const rows: string[] = [];
+        const cols     = ['#','Time','UTC','Arb ID','Type','Dir','Ch','DLC','Data','Flags'];
+        rows.push(cols.join('\t'));
+        for (const idx of req.indices) {
+          const m = sorted[idx];
+          if (!m) { continue; }
+          const w = toWire(m, idx, dbcDb, dbcChannel);
+          rows.push([w.i+1, w.t, w.utc, w.id, w.type, w.dir, w.ch, w.dlc, w.data, w.flags].join('\t'));
+        }
+        const doc = await vscode.workspace.openTextDocument({
+          content: rows.join('\n'),
+          language: 'plaintext',
+        });
+        await vscode.window.showTextDocument(doc, { preview: true });
+        return;
+      }
     });
 
     webviewPanel.onDidDispose(() => {
