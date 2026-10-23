@@ -42,11 +42,24 @@ async function main() {
 			esbuildProblemMatcherPlugin,
 		],
 	});
+	const webviewCtx = await esbuild.context({
+		entryPoints: ['src/webview/main.js'],
+		bundle: true,
+		format: 'iife',
+		minify: production,
+		sourcemap: false, // inlined into HTML; a .map would never resolve
+		platform: 'browser',
+		outfile: 'dist/webview.js',
+		logLevel: 'silent',
+		plugins: [esbuildProblemMatcherPlugin],
+	});
 	if (watch) {
-		await ctx.watch();
+		await Promise.all([ctx.watch(), webviewCtx.watch()]);
 	} else {
 		await ctx.rebuild();
+		await webviewCtx.rebuild();
 		await ctx.dispose();
+		await webviewCtx.dispose();
 	}
 }
 
