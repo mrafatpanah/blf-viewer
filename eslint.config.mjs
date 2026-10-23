@@ -3,6 +3,10 @@ import typescriptEslint from "typescript-eslint";
 export default [{
     files: ["**/*.ts"],
 }, {
+    // src/webview/main.js is a plain bundled runtime with no tsconfig/DOM lib
+    // coverage (see plans/009) — excluded from linting until it gets one.
+    ignores: ["src/webview/**"],
+
     plugins: {
         "@typescript-eslint": typescriptEslint.plugin,
     },
