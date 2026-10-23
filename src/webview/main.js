@@ -1,1 +1,1688 @@
-(function () { 'use strict'; })();
+(function () {
+'use strict';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────────────────────
+const ROW_H    = 26;   // must match CSS --row-h exactly
+const OVERSCAN = 15;   // extra rows above/below visible viewport
+const PAGE_SZ  = 60;   // rows per postMessage round-trip
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COLUMN DEFINITIONS
+// key must match WireMessage field names (or 'flags').
+// 'flex:true' columns take remaining width; only one should have flex.
+// ─────────────────────────────────────────────────────────────────────────────
+const DEFAULT_COLS = [
+  { key:'i',       label:'#',       width:52,  minWidth:36,  sortable:true,  visible:true  },
+  { key:'t',       label:'Time(s)', width:108, minWidth:70,  sortable:true,  visible:true  },
+  { key:'utc',     label:'UTC',     width:178, minWidth:140, sortable:true,  visible:true  },
+  { key:'id',      label:'Arb ID',  width:100, minWidth:60,  sortable:true,  visible:true  },
+  { key:'name',    label:'Name',    width:160, minWidth:80,  sortable:false, visible:false },
+  { key:'type',    label:'Type',    width:54,  minWidth:40,  sortable:true,  visible:true  },
+  { key:'dir',     label:'Dir',     width:48,  minWidth:36,  sortable:true,  visible:true  },
+  { key:'ch',      label:'Ch',      width:40,  minWidth:30,  sortable:true,  visible:true  },
+  { key:'dlc',     label:'DLC',     width:38,  minWidth:30,  sortable:true,  visible:true  },
+  { key:'flags',   label:'Flags',   width:110, minWidth:60,  sortable:false, visible:true  },
+  { key:'diagId',  label:'Diag ID', width:100, minWidth:60,  sortable:false, visible:false },
+  { key:'src',     label:'Src',     width:54,  minWidth:40,  sortable:false, visible:false },
+  { key:'dst',     label:'Dst',     width:54,  minWidth:40,  sortable:false, visible:false },
+  { key:'conn',    label:'Conn',    width:50,  minWidth:36,  sortable:false, visible:false },
+  { key:'service', label:'Service', width:160, minWidth:80,  sortable:false, visible:false },
+  { key:'data',    label:'Data',    width:0,   minWidth:120, sortable:false, visible:true, flex:true },
+];
+
+// Working copy — mutated by reorder/resize/visibility toggles
+let cols = DEFAULT_COLS.map(c => ({ ...c }));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────────────────
+const vscode      = acquireVsCodeApi();
+
+let totalFiltered = 0;            // total rows after filter+sort (from host)
+let selectedRowI  = -1;           // single-selected row's 'i' value
+let selectedSet   = new Set();    // multi-select set of 'i' values
+let lastClickedI  = -1;           // anchor for shift-click range
+
+const pageCache   = new Map();    // Map<pageStart, WireMessage[]>
+const pending     = new Set();    // page-starts requested but not yet received
+
+let filter = { id:'', data:'', dir:'', msgType:'', channel:'' };
+let sort   = { col:'i', dir:'asc' };
+
+// Colorization: Map<rowI, colorName>
+const rowColors = new Map();
+
+// DBC state
+let dbcLoaded   = false;
+let dbcFileName = '';
+
+// CDD state — true only when reconstruction ran (Request/Response CAN-IDs found)
+let cddActive   = false;
+
+// Name column is shared: DBC message names and CDD service/<OTP> names both use it.
+function updateNameCol() {
+  const nameCol = cols.find(c => c.key === 'name');
+  if (nameCol) { nameCol.visible = dbcLoaded || cddActive; }
+}
+
+// Grouping field key or null
+let groupBy = null;
+
+// Search hit state
+let searchHitRowI    = -1;  // 'i' index of highlighted search hit (cleared on filter change)
+let searchMatchPos   = 0;   // 1-based hit counter shown in UI
+let searchTotal      = 0;   // total match count from host
+let lastSearchKey    = '';  // JSON criteria fingerprint; '' = invalidated
+let pendingSearchDir = 'forward';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOM REFS
+// ─────────────────────────────────────────────────────────────────────────────
+const scroller    = document.getElementById('scroller');
+const spacer      = document.getElementById('spacer');
+const overlay     = document.getElementById('overlay');
+const detailPanel = document.getElementById('detail');
+const detailBody  = document.getElementById('detailBody');
+const rCountEl    = document.getElementById('rCount');
+const selCountEl  = document.getElementById('selCount');
+const theadWrap   = document.getElementById('theadWrap');
+const ctxMenu     = document.getElementById('ctxMenu');
+const ctxSubmenu  = document.getElementById('ctxSubmenu');
+const toastEl     = document.getElementById('toast');
+const groupBar    = document.getElementById('groupBar');
+const groupChips  = document.getElementById('groupChips');
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COLUMN HEADER
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildHeader() {
+  theadWrap.innerHTML = '';
+  const row = document.createElement('div');
+  row.className = 'thead-row';
+
+  cols.forEach((col, ci) => {
+    if (!col.visible) return;
+
+    const th = document.createElement('div');
+    th.className     = 'th-inner' + (sort.col === col.key ? ' sorted' : '');
+    th.dataset.ci    = ci;
+    th.draggable     = true;
+    th.style.cssText = thStyle(col);
+
+    const arrow = sort.col === col.key ? (sort.dir === 'asc' ? '↑' : '↓') : (col.sortable ? '↕' : '');
+    th.innerHTML =
+      '<span class="th-drag" title="Drag to reorder">⠿</span>' +
+      '<span class="th-label">' + col.label + '</span>' +
+      (col.sortable ? '<span class="sort-ind">' + arrow + '</span>' : '') +
+      '<div class="th-resize" data-ci="' + ci + '" tabindex="0" role="separator" aria-label="Resize ' + col.label + ' column"></div>';
+
+    // Sort click (skip if the event originated on the resize/drag handles)
+    if (col.sortable) {
+      th.addEventListener('click', e => {
+        if (e.target.classList.contains('th-resize') ||
+            e.target.classList.contains('th-drag')) return;
+        onSortClick(col.key);
+      });
+    }
+
+    // Column drag-to-reorder
+    th.addEventListener('dragstart', onColDragStart);
+    th.addEventListener('dragover',  onColDragOver);
+    th.addEventListener('dragleave', onColDragLeave);
+    th.addEventListener('drop',      onColDrop);
+    th.addEventListener('dragend',   onColDragEnd);
+
+    // Column resize
+    const resizeHandle = th.querySelector('.th-resize');
+    resizeHandle.addEventListener('mousedown', onResizeStart);
+    resizeHandle.addEventListener('dblclick',  onColAutoFit);
+    resizeHandle.addEventListener('keydown', e => {
+      const ci = parseInt(e.currentTarget.dataset.ci, 10);
+      const col = cols[ci];
+      if (!col || col.flex) return;
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      e.stopPropagation(); // don't let the global row-nav handler also move row selection
+      if (e.key === 'ArrowLeft')  { col.width = Math.max(col.minWidth, col.width - 10); }
+      if (e.key === 'ArrowRight') { col.width = Math.min(500, col.width + 10); }
+      syncHeaderWidths();
+      renderViewport();
+    });
+
+    row.appendChild(th);
+  });
+
+  theadWrap.appendChild(row);
+}
+
+function thStyle(col) {
+  const base = 'overflow:hidden;position:relative;';
+  return col.flex
+    ? base + 'flex:1;min-width:' + col.minWidth + 'px;'
+    : base + 'width:' + col.width + 'px;min-width:' + col.minWidth + 'px;flex-shrink:0;';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SORT
+// ─────────────────────────────────────────────────────────────────────────────
+
+function onSortClick(key) {
+  if (sort.col === key) {
+    sort.dir = sort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    sort.col = key;
+    sort.dir = 'asc';
+  }
+  buildHeader();
+  resetAndRefetch();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COLUMN RESIZE
+// ─────────────────────────────────────────────────────────────────────────────
+
+let resizeCi = -1, resizeStartX = 0, resizeStartW = 0;
+
+function onResizeStart(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  resizeCi     = parseInt(e.currentTarget.dataset.ci, 10);
+  resizeStartX = e.clientX;
+  resizeStartW = cols[resizeCi].width;
+  e.currentTarget.classList.add('active');
+  document.addEventListener('mousemove', onResizeMove);
+  document.addEventListener('mouseup',   onResizeEnd);
+}
+
+function onResizeMove(e) {
+  if (resizeCi < 0) return;
+  cols[resizeCi].width = Math.max(cols[resizeCi].minWidth, resizeStartW + (e.clientX - resizeStartX));
+  syncHeaderWidths();
+  renderViewport();  // re-paint rows immediately so widths stay in sync
+}
+
+function onResizeEnd() {
+  resizeCi = -1;
+  document.removeEventListener('mousemove', onResizeMove);
+  document.removeEventListener('mouseup',   onResizeEnd);
+  document.querySelectorAll('.th-resize').forEach(h => h.classList.remove('active'));
+}
+
+// Measure text width using transient offscreen element
+const _measEl = (() => { const e = document.createElement('span'); e.style.cssText = 'position:fixed;visibility:hidden;white-space:pre;font:var(--mono)'; document.body.appendChild(e); return e; })();
+function textWidth(s) { _measEl.textContent = String(s ?? ''); return _measEl.offsetWidth; }
+
+function autoFitColumn(ci) {
+  const col = cols[ci];
+  if (!col || col.flex) return;
+
+  // Measure header
+  const headerLabel = col.label || col.key;
+  let maxW = textWidth(headerLabel) + 20; // padding
+
+  // Measure data from page cache
+  for (const [, pageRows] of pageCache) {
+    for (const r of pageRows) {
+      let val;
+      switch (col.key) {
+        case 'i':       val = r.i != null ? String(r.i + 1) : ''; break;
+        case 't':       val = r.t ?? ''; break;
+        case 'utc':     val = r.utc ?? ''; break;
+        case 'id':      val = r.id ?? ''; break;
+        case 'name':    val = r.msgName ?? ''; break;
+        case 'type':    val = r.type ?? ''; break;
+        case 'dir':     val = r.dir ?? ''; break;
+        case 'ch':      val = r.ch != null ? String(r.ch) : ''; break;
+        case 'dlc':     val = r.dlc != null ? String(r.dlc) : ''; break;
+        case 'data':    val = r.data ?? ''; break;
+        case 'flags':   val = r.flags ?? ''; break;
+        case 'diagId':  val = r.diagId ?? ''; break;
+        case 'src':     val = r.src ?? ''; break;
+        case 'dst':     val = r.dst ?? ''; break;
+        case 'conn':    val = r.conn != null ? String(r.conn) : ''; break;
+        case 'service': val = r.service ?? ''; break;
+        default:        val = '';
+      }
+      const w = textWidth(val) + 14; // cell padding
+      if (w > maxW) maxW = w;
+    }
+  }
+
+  col.width = Math.max(col.minWidth, Math.ceil(Math.min(maxW, 500))); // cap at 500px
+  syncHeaderWidths();
+  renderViewport();
+}
+
+function onColAutoFit(e) {
+  const ci = parseInt(e.currentTarget.dataset.ci, 10);
+  if (ci >= 0) autoFitColumn(ci);
+}
+
+// Sync only header widths without rebuilding DOM
+function syncHeaderWidths() {
+  const ths = theadWrap.querySelectorAll('.th-inner');
+  let vi = 0;
+  cols.forEach(col => {
+    if (!col.visible) return;
+    const th = ths[vi++];
+    if (!th) return;
+    if (col.flex) { th.style.flex = '1'; th.style.width = ''; }
+    else          { th.style.width = col.width + 'px'; th.style.flex = ''; }
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COLUMN DRAG-TO-REORDER
+// ─────────────────────────────────────────────────────────────────────────────
+
+let dragSrcCi = -1;
+
+function onColDragStart(e) {
+  dragSrcCi = parseInt(e.currentTarget.dataset.ci, 10);
+  e.currentTarget.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+function onColDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('drag-over');
+}
+function onColDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+function onColDrop(e) {
+  e.preventDefault();
+  const targetCi = parseInt(e.currentTarget.dataset.ci, 10);
+  e.currentTarget.classList.remove('drag-over');
+  if (dragSrcCi < 0 || dragSrcCi === targetCi) return;
+  const moved    = cols.splice(dragSrcCi, 1)[0];
+  const insertAt = dragSrcCi < targetCi ? targetCi - 1 : targetCi;
+  cols.splice(insertAt, 0, moved);
+  buildHeader();
+  renderViewport();
+}
+function onColDragEnd(e) {
+  e.currentTarget.classList.remove('dragging');
+  dragSrcCi = -1;
+  document.querySelectorAll('.th-inner').forEach(t => t.classList.remove('drag-over'));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COLUMN VISIBILITY POPOVER
+// ─────────────────────────────────────────────────────────────────────────────
+
+document.getElementById('btnCols').addEventListener('click', function(e) {
+  const existing = document.getElementById('colsPopover');
+  if (existing) { existing.remove(); return; }
+
+  const pop = document.createElement('div');
+  pop.id = 'colsPopover';
+  pop.style.cssText =
+    'position:fixed;z-index:9998;background:var(--bg2);border:1px solid var(--border);' +
+    'border-radius:6px;box-shadow:0 8px 32px rgba(0,0,0,.4);padding:8px 0;min-width:160px;font-size:12px;';
+
+  const rect = this.getBoundingClientRect();
+  pop.style.top   = (rect.bottom + 4) + 'px';
+  pop.style.right = (document.body.clientWidth - rect.right) + 'px';
+
+  cols.forEach((col, ci) => {
+    const lbl = document.createElement('label');
+    lbl.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 12px;cursor:pointer;color:var(--fg)';
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.checked = col.visible;
+    chk.addEventListener('change', () => {
+      cols[ci].visible = chk.checked;
+      buildHeader();
+      renderViewport();
+    });
+    lbl.appendChild(chk);
+    lbl.appendChild(document.createTextNode(' ' + col.label));
+    pop.appendChild(lbl);
+  });
+
+  document.body.appendChild(pop);
+
+  const close = ev => {
+    if (!pop.contains(ev.target) && ev.target !== e.currentTarget) {
+      pop.remove();
+      document.removeEventListener('mousedown', close);
+    }
+  };
+  setTimeout(() => document.addEventListener('mousedown', close), 10);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ROW POOL  (object-pool pattern for zero-GC virtual scrolling)
+// ─────────────────────────────────────────────────────────────────────────────
+
+let rowPool = [];
+
+function ensurePool(needed) {
+  while (rowPool.length < needed) {
+    const div = document.createElement('div');
+    div.className = 'row';
+    div.addEventListener('click',       onRowClick);
+    div.addEventListener('contextmenu', onRowContextMenu);
+    spacer.appendChild(div);
+    rowPool.push(div);
+  }
+  // Hide all — renderViewport unhides the ones it needs
+  for (let i = 0; i < rowPool.length; i++) rowPool[i].style.display = 'none';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VIRTUAL SCROLL CORE
+// ─────────────────────────────────────────────────────────────────────────────
+
+function updateSpacerHeight() {
+  spacer.style.height = Math.max(0, totalFiltered) * ROW_H + 'px';
+}
+
+function renderViewport() {
+  // Show/hide the "no results" state
+  const emptyEl = document.getElementById('emptyState');
+  if (totalFiltered === 0) {
+    if (emptyEl) emptyEl.classList.remove('hidden');
+    // Hide every pooled row so nothing stale is visible
+    for (let i = 0; i < rowPool.length; i++) rowPool[i].style.display = 'none';
+    return;
+  }
+  if (emptyEl) emptyEl.classList.add('hidden');
+
+  const scrollTop    = scroller.scrollTop;
+  const viewH        = scroller.clientHeight;
+  const firstVisible = Math.floor(scrollTop / ROW_H);
+  const lastVisible  = Math.min(totalFiltered - 1, Math.ceil((scrollTop + viewH) / ROW_H));
+  const renderStart  = Math.max(0, firstVisible - OVERSCAN);
+  const renderEnd    = Math.min(totalFiltered - 1, lastVisible + OVERSCAN);
+  const count        = renderEnd - renderStart + 1;
+
+  ensurePool(count);
+  requestPagesForRange(renderStart, renderEnd);
+
+  for (let vi = 0; vi < count; vi++) {
+    const rowIdx = renderStart + vi;
+    const div    = rowPool[vi];
+    div.style.display = 'flex';
+    div.style.top     = (rowIdx * ROW_H) + 'px';
+    const msg = getCachedRow(rowIdx);
+    msg ? renderRow(div, msg) : renderPlaceholder(div, rowIdx);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAGE MANAGEMENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+function pageStart(idx) { return Math.floor(idx / PAGE_SZ) * PAGE_SZ; }
+
+function requestPagesForRange(start, end) {
+  for (let p = pageStart(start); p <= pageStart(end); p += PAGE_SZ) {
+    if (!pageCache.has(p) && !pending.has(p)) {
+      pending.add(p);
+      vscode.postMessage({
+        type: 'requestPage', startIndex: p, count: PAGE_SZ,
+        filter: { ...filter }, sort: { ...sort },
+      });
+    }
+  }
+}
+
+function getCachedRow(rowIdx) {
+  const ps   = pageStart(rowIdx);
+  const page = pageCache.get(ps);
+  return page ? (page[rowIdx - ps] ?? null) : null;
+}
+
+// Called on every filter / sort change — clears cache and scrolls to top.
+function resetAndRefetch() {
+  pageCache.clear();
+  pending.clear();
+  selectedRowI = -1;
+  selectedSet.clear();
+  updateSelCount();
+  searchHitRowI = -1;
+  lastSearchKey = '';
+  updateSearchMatchCount();
+  scroller.scrollTop = 0;
+
+  // Optimistically clear the row count now — the real value arrives with page 0.
+  // Without this, the spacer keeps its old height and "ghost" rows stay visible
+  // after a filter change that yields fewer (or zero) results.
+  totalFiltered = 0;
+  updateSpacerHeight();
+  rCountEl.textContent = '…';
+  renderViewport();   // hides all pool rows and shows empty-state if count is 0
+
+  // Request page 0; when it arrives totalFiltered will be updated to the real value
+  pending.add(0);
+  vscode.postMessage({
+    type: 'requestPage', startIndex: 0, count: PAGE_SZ,
+    filter: { ...filter }, sort: { ...sort },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ROW RENDERING
+// ─────────────────────────────────────────────────────────────────────────────
+
+function renderRow(div, m) {
+  const isSel      = m.i === selectedRowI;
+  const isMultiSel = selectedSet.has(m.i);
+  const color      = rowColors.get(m.i) || '';
+
+  let cls = 'row';
+  if (isSel)              cls += ' sel';
+  else if (isMultiSel)    cls += ' sel-multi';
+  else if (m.err)         cls += ' r-err';
+  else if (m.type==='FD') cls += ' r-fd';
+  if (m.i === searchHitRowI) { cls += ' row-search-hit'; }
+
+  div.className  = cls;
+  div.dataset.mi = m.i;
+  if (color) div.dataset.color = color;
+  else       delete div.dataset.color;
+
+  div.innerHTML = buildRowHTML(m);
+}
+
+function buildRowHTML(m) {
+  let tc = 'b-std';
+  if (m.type === 'ERR' || m.type === 'neg') { tc = 'b-err'; }
+  else if (m.type === 'FD') { tc = 'b-fd'; }
+  else if (m.type === 'req') { tc = 'b-tx'; }
+  else if (m.type === 'pos') { tc = 'b-rx'; }
+
+  const dc = m.dir==='RX'   ? 'b-rx'  : 'b-tx';
+  let html = '';
+
+  for (const col of cols) {
+    if (!col.visible) continue;
+    const s = col.flex
+      ? 'flex:1;min-width:' + col.minWidth + 'px;'
+      : 'width:' + col.width + 'px;flex-shrink:0;';
+
+    let content;
+    switch (col.key) {
+      case 'i':       content = '<span class="t-idx">'   + (m.i+1)    + '</span>'; break;
+      case 't':       content = '<span class="t-time">'  + esc(m.t)   + '</span>'; break;
+      case 'utc':     content = '<span class="t-time">'  + esc(m.utc) + '</span>'; break;
+      case 'id':      content = '<span class="t-id">'    + esc(m.id)  + '</span>'; break;
+      case 'name':    content = m.msgName
+                        ? '<span style="color:var(--purple);font-weight:500">' + esc(m.msgName) + '</span>'
+                        : '<span style="color:var(--fg2);font-size:11px">—</span>'; break;
+      case 'type':    content = '<span class="badge ' + tc + '">'     + esc(m.type) + '</span>'; break;
+      case 'dir':     content = '<span class="badge ' + dc + '">'     + esc(m.dir)  + '</span>'; break;
+      case 'ch':      content = m.ch;  break;
+      case 'dlc':     content = m.dlc; break;
+      case 'data':    content = '<span class="t-data">'  + esc(m.data) + '</span>'; break;
+      case 'flags':   content = renderFlags(m); break;
+      case 'diagId':  content = m.diagId
+                        ? '<span style="color:var(--yellow);font-weight:500">' + esc(m.diagId) + '</span>'
+                        : '<span style="color:var(--fg2);font-size:11px">—</span>'; break;
+      case 'src':     content = m.src
+                        ? '<span style="color:var(--blue)">' + esc(m.src) + '</span>'
+                        : '<span style="color:var(--fg2);font-size:11px">—</span>'; break;
+      case 'dst':     content = m.dst
+                        ? '<span style="color:var(--blue)">' + esc(m.dst) + '</span>'
+                        : '<span style="color:var(--fg2);font-size:11px">—</span>'; break;
+      case 'conn':    content = m.conn !== undefined
+                        ? '<span style="color:var(--fg2)">' + esc(m.conn) + '</span>'
+                        : '<span style="color:var(--fg2);font-size:11px">—</span>'; break;
+      case 'service': content = m.service
+                        ? '<span style="color:var(--purple);font-weight:500">' + esc(m.service) + '</span>'
+                        : '<span style="color:var(--fg2);font-size:11px">—</span>'; break;
+      default:      content = '';
+    }
+    html += '<div class="cell" style="' + s + '">' + content + '</div>';
+  }
+  return html;
+}
+
+function renderPlaceholder(div, rowIdx) {
+  div.className  = 'row';
+  div.dataset.mi = '';
+  delete div.dataset.color;
+  div.innerHTML =
+    '<div class="cell" style="width:52px;flex-shrink:0"><span class="t-idx">' + (rowIdx+1) + '</span></div>' +
+    '<div class="cell" style="flex:1;color:var(--fg2);font-size:11px">loading…</div>';
+}
+
+function renderFlags(m) {
+  return (m.ext ? '<span class="flag f-ext">EXT</span>' : '') +
+         (m.rtr ? '<span class="flag f-rtr">RTR</span>' : '') +
+         (m.brs ? '<span class="flag f-brs">BRS</span>' : '') +
+         (m.esi ? '<span class="flag f-esi">ESI</span>' : '');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ROW SELECTION (single / ctrl / shift)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function onRowClick(e) {
+  const mi = parseInt(e.currentTarget.dataset.mi ?? '-1', 10);
+  if (isNaN(mi) || mi < 0) return;
+
+  if (e.shiftKey && lastClickedI >= 0) {
+    const lo = Math.min(lastClickedI, mi);
+    const hi = Math.max(lastClickedI, mi);
+    for (let x = lo; x <= hi; x++) selectedSet.add(x);
+    selectedRowI = mi;
+  } else if (e.ctrlKey || e.metaKey) {
+    if (selectedSet.has(mi)) selectedSet.delete(mi);
+    else selectedSet.add(mi);
+    selectedRowI = mi;
+  } else {
+    selectedSet.clear();
+    selectedRowI = mi;
+    lastClickedI = mi;
+    showDetail(getCachedRow(mi));
+  }
+
+  updateSelCount();
+  renderViewport();
+}
+
+function updateSelCount() {
+  const n = selectedSet.size;
+  selCountEl.textContent = n > 1 ? n + ' selected' : '';
+  selCountEl.style.display = n > 1 ? 'inline' : 'none';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTEXT MENU
+// ─────────────────────────────────────────────────────────────────────────────
+
+let ctxTargetI = -1;
+
+function onRowContextMenu(e) {
+  e.preventDefault();
+  const mi = parseInt(e.currentTarget.dataset.mi ?? '-1', 10);
+  if (isNaN(mi) || mi < 0) return;
+
+  // Auto-select if not already
+  if (!selectedSet.has(mi) && mi !== selectedRowI) {
+    selectedSet.clear();
+    selectedRowI = mi;
+    lastClickedI = mi;
+    updateSelCount();
+    renderViewport();
+  }
+
+  ctxTargetI = mi;
+  showContextMenu(e.clientX, e.clientY, mi);
+}
+
+function showContextMenu(x, y, mi) {
+  closeCtxMenu();
+  const m      = getCachedRow(mi);
+  const isMul  = selectedSet.size > 1;
+  const label  = isMul ? selectedSet.size + ' messages' : (m ? esc(m.id) : 'Message');
+  const hasClr = rowColors.has(mi);
+
+  ctxMenu.innerHTML =
+    '<div class="ctx-label">' + ico('pin') + ' ' + label + '</div>' +
+
+    '<div class="ctx-item" id="cxFilter">' +
+      '<span class="ctx-icon">' + ico('search') + '</span>Add to Filter</div>' +
+
+    '<div class="ctx-item" id="cxDetail">' +
+      '<span class="ctx-icon">⊟</span>Show Details</div>' +
+
+    '<div class="ctx-sep"></div>' +
+
+    '<div class="ctx-item" id="cxColor">' +
+      '<span class="ctx-icon">' + ico('palette') + '</span>Colorize<span class="ctx-arrow">›</span></div>' +
+
+    '<div class="ctx-item" id="cxGroup">' +
+      '<span class="ctx-icon">⊞</span>Group by…<span class="ctx-arrow">›</span></div>' +
+
+    '<div class="ctx-sep"></div>' +
+
+    '<div class="ctx-item" id="cxSameId">' +
+      '<span class="ctx-icon">◈</span>Select all with same ID</div>' +
+
+    '<div class="ctx-sep"></div>' +
+
+    '<div class="ctx-item" id="cxCopyRow">' +
+      '<span class="ctx-icon">⎘</span>Copy row</div>' +
+
+    '<div class="ctx-item" id="cxCopyId">' +
+      '<span class="ctx-icon">⎘</span>Copy Arb ID</div>' +
+
+    '<div class="ctx-item" id="cxCopyData">' +
+      '<span class="ctx-icon">⎘</span>Copy data bytes</div>' +
+
+    '<div class="ctx-item" id="cxCopyCsv">' +
+      '<span class="ctx-icon">⎘</span>Copy selection as CSV</div>' +
+
+    '<div class="ctx-sep"></div>' +
+    '<div class="ctx-item" id="cxOpenEditor">' +
+      '<span class="ctx-icon">⊞</span>' + (isMul ? 'Open ' + selectedSet.size + ' in editor' : 'Open in editor') + '</div>' +
+
+    (hasClr ? '<div class="ctx-sep"></div>' +
+      '<div class="ctx-item danger" id="cxClearClr">' +
+        '<span class="ctx-icon">' + ico('x') + '</span>Remove color</div>' : '');
+
+  // Make items focusable/announced for keyboard nav and screen readers
+  ctxMenu.querySelectorAll('.ctx-item').forEach(el => {
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('role', 'menuitem');
+  });
+
+  // Position (keep on screen)
+  ctxMenu.style.display = 'block';
+  const mw = ctxMenu.offsetWidth, mh = ctxMenu.offsetHeight;
+  ctxMenu.style.left = Math.min(x, window.innerWidth  - mw - 8) + 'px';
+  ctxMenu.style.top  = Math.min(y, window.innerHeight - mh - 8) + 'px';
+  ctxMenu.querySelector('.ctx-item')?.focus();
+
+  // ── Wire up items ──────────────────────────────────────────────
+
+  bind('cxFilter', () => {
+    if (!m) return;
+    const fId = document.getElementById('fId');
+    if (fId) { fId.value = m.id; onFilterChange(); }
+    closeCtxMenu();
+  });
+
+  bind('cxDetail', () => {
+    if (!m) return;
+    detailPanel.classList.remove('hidden');
+    document.getElementById('btnDetail').classList.add('active');
+    document.getElementById('btnDetail').setAttribute('aria-pressed', 'true');
+    showDetail(m);
+    closeCtxMenu();
+  });
+
+  bind('cxColor',  e2 => showColorSubmenu(e2.currentTarget, mi));
+  bind('cxGroup',  e2 => showGroupSubmenu(e2.currentTarget));
+
+  bind('cxSameId', () => {
+    if (!m) return;
+    const tid = m.rawId;
+    selectedSet.clear();
+    pageCache.forEach(page => page.forEach(r => { if (r.rawId === tid) selectedSet.add(r.i); }));
+    updateSelCount();
+    renderViewport();
+    closeCtxMenu();
+  });
+
+  bind('cxCopyRow', () => {
+    if (!m) return;
+    copyText([m.i+1, m.t, m.utc, m.id, m.type, m.dir, m.ch, m.dlc, m.data, m.flags].join('\t'));
+    closeCtxMenu();
+  });
+
+  bind('cxCopyId',   () => { if (m) copyText(m.id);   closeCtxMenu(); });
+  bind('cxCopyData', () => { if (m) copyText(m.data);  closeCtxMenu(); });
+
+  bind('cxCopyCsv', () => {
+    const all  = [];
+    pageCache.forEach(page => page.forEach(r => {
+      if (selectedSet.has(r.i) || r.i === selectedRowI) all.push(r);
+    }));
+    all.sort((a,b) => a.i - b.i);
+    const hasName = all.some(r => r.msgName);
+    const hasDiag = all.some(r => r.diagId);
+    const hasSrcDst = all.some(r => r.src);
+    const hasConn = all.some(r => r.conn !== undefined);
+    const hasService = all.some(r => r.service);
+    const hasSignals = all.some(r => r.signals && r.signals.length);
+    const head = ['#','Time','UTC','Arb ID'];
+    if (hasName) { head.push('Name'); }
+    head.push('Type','Dir','Ch','DLC','Data','Flags');
+    if (hasDiag) { head.push('Diag ID'); }
+    if (hasSrcDst) { head.push('Src','Dst'); }
+    if (hasConn) { head.push('Conn'); }
+    if (hasService) { head.push('Service'); }
+    if (hasSignals) { head.push('Signals'); }
+    const rows = [head.join(',')];
+    all.forEach(r => {
+      const row = [csvCell(r.i+1), csvCell(r.t), csvCell(r.utc), csvCell(r.id)];
+      if (hasName) { row.push(csvCell(r.msgName || '')); }
+      row.push(csvCell(r.type), csvCell(r.dir), csvCell(r.ch), csvCell(r.dlc), csvCell(r.data), csvCell(r.flags));
+      if (hasDiag) { row.push(csvCell(r.diagId || '')); }
+      if (hasSrcDst) { row.push(csvCell(r.src || ''), csvCell(r.dst || '')); }
+      if (hasConn) { row.push(csvCell(r.conn !== undefined ? r.conn : '')); }
+      if (hasService) { row.push(csvCell(r.service || '')); }
+      if (hasSignals) { row.push(csvCell(r.signals && r.signals.length ? r.signals.map(s => s.name + '=' + s.physStr).join('; ') : '')); }
+      rows.push(row.join(','));
+    });
+    copyText(rows.join('\n'));
+    closeCtxMenu();
+  });
+
+  bind('cxClearClr', () => {
+    const targets = selectedSet.size > 1 ? [...selectedSet] : [mi];
+    targets.forEach(i => rowColors.delete(i));
+    renderViewport();
+    closeCtxMenu();
+  });
+
+  bind('cxOpenEditor', () => {
+    const items = selectedSet.size > 1 ? [...selectedSet] : [mi];
+    vscode.postMessage({ type: 'openInEditor', indices: items, filter: { ...filter }, sort: { ...sort } });
+    closeCtxMenu();
+  });
+}
+
+function bind(id, fn) {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('click', fn);
+}
+
+function showColorSubmenu(anchor, mi) {
+  const swatches = [
+    { name:'red',    bg:'#c0392b' },{ name:'green',  bg:'#27ae60' },
+    { name:'blue',   bg:'#2980b9' },{ name:'yellow', bg:'#f39c12' },
+    { name:'purple', bg:'#8e44ad' },{ name:'orange', bg:'#e67e22' },
+  ];
+
+  ctxSubmenu.innerHTML = '';
+  ctxSubmenu.style.cssText = 'display:flex;flex-direction:row;gap:6px;padding:8px;flex-wrap:nowrap;';
+
+  swatches.forEach(sw => {
+    const el = document.createElement('div');
+    el.className = 'color-swatch';
+    el.title     = sw.name;
+    el.tabIndex  = 0;
+    el.setAttribute('role', 'menuitem');
+    el.setAttribute('aria-label', sw.name);
+    el.style.background = sw.bg;
+    el.addEventListener('click', () => {
+      const targets = selectedSet.size > 1 ? [...selectedSet] : [mi];
+      targets.forEach(i => rowColors.set(i, sw.name));
+      renderViewport();
+      closeCtxMenu();
+    });
+    ctxSubmenu.appendChild(el);
+  });
+
+  // "Clear" swatch
+  const clr = document.createElement('div');
+  clr.className = 'color-swatch';
+  clr.title = 'Clear color';
+  clr.tabIndex = 0;
+  clr.setAttribute('role', 'menuitem');
+  clr.setAttribute('aria-label', 'Clear color');
+  clr.style.cssText = 'background:transparent;border:2px dashed var(--border)';
+  clr.addEventListener('click', () => {
+    const targets = selectedSet.size > 1 ? [...selectedSet] : [mi];
+    targets.forEach(i => rowColors.delete(i));
+    renderViewport();
+    closeCtxMenu();
+  });
+  ctxSubmenu.appendChild(clr);
+
+  ctxSubmenu.querySelector('.color-swatch')?.focus();
+  positionSubmenu(anchor);
+}
+
+function showGroupSubmenu(anchor) {
+  const opts = [
+    { key:'type', label:'Message Type (STD/FD/ERR)' },
+    { key:'dir',  label:'Direction (RX/TX)' },
+    { key:'ch',   label:'Channel' },
+    { key:'id',   label:'Arb ID' },
+  ];
+
+  ctxSubmenu.innerHTML = '';
+  ctxSubmenu.style.cssText = 'display:flex;flex-direction:column;padding:4px 0;';
+
+  opts.forEach(o => {
+    const el = document.createElement('div');
+    el.className = 'ctx-item';
+    el.tabIndex  = 0;
+    el.setAttribute('role', 'menuitem');
+    el.innerHTML = esc(o.label) + (groupBy === o.key ? ' ' + ico('check') : '');
+    el.addEventListener('click', () => { setGroupBy(o.key); closeCtxMenu(); });
+    ctxSubmenu.appendChild(el);
+  });
+
+  ctxSubmenu.querySelector('.ctx-item')?.focus();
+  positionSubmenu(anchor);
+}
+
+function positionSubmenu(anchor) {
+  const rect = anchor.getBoundingClientRect();
+  ctxSubmenu.style.top  = rect.top  + 'px';
+  ctxSubmenu.style.left = rect.right + 4 + 'px';
+  ctxSubmenu.style.display = 'flex';
+
+  // Flip left if off screen
+  const sw = ctxSubmenu.offsetWidth;
+  if (rect.right + 4 + sw > window.innerWidth) {
+    ctxSubmenu.style.left = (rect.left - sw - 4) + 'px';
+  }
+}
+
+function setGroupBy(key) {
+  groupBy = key;
+  groupBar.classList.remove('hidden');
+  groupChips.innerHTML =
+    '<div class="group-chip">' + esc(key) + '<button onclick="clearGroupBy()">×</button></div>';
+  showToast('Grouped by ' + key);
+}
+
+// exposed to onclick in HTML
+window.clearGroupBy = function() {
+  groupBy = null;
+  groupBar.classList.add('hidden');
+  groupChips.innerHTML = '';
+};
+
+document.getElementById('btnClearGroup').addEventListener('click', window.clearGroupBy);
+
+function closeCtxMenu() {
+  ctxMenu.style.display    = 'none';
+  ctxSubmenu.style.display = 'none';
+}
+
+document.addEventListener('mousedown', e => {
+  if (!ctxMenu.contains(e.target) && !ctxSubmenu.contains(e.target)) closeCtxMenu();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KEYBOARD NAVIGATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+function scrollToRow(idx) {
+  const rowTop = idx * ROW_H;
+  const st     = scroller.scrollTop;
+  const vh     = scroller.clientHeight;
+  if (rowTop < st)                         { scroller.scrollTop = rowTop; }
+  else if (rowTop + ROW_H > st + vh)       { scroller.scrollTop = rowTop - vh + ROW_H; }
+}
+
+function copySelectedAsTsv() {
+  const items = selectedSet.size > 0 ? [...selectedSet].sort((a,b)=>a-b) : [selectedRowI];
+  const showHeaders = cols.filter(c => c.visible).map(c => c.label);
+  const body = items.reduce((acc, mi) => {
+    const r = getCachedRow(mi);
+    if (!r) return acc;
+    const cells = cols.filter(c => c.visible).map(c => {
+      switch (c.key) {
+        case 'i':       return r.i != null ? String(r.i + 1) : '';
+        case 't':       return r.t ?? '';
+        case 'utc':     return r.utc ?? '';
+        case 'id':      return r.id ?? '';
+        case 'name':    return r.msgName ?? '';
+        case 'type':    return r.type ?? '';
+        case 'dir':     return r.dir ?? '';
+        case 'ch':      return r.ch != null ? String(r.ch) : '';
+        case 'dlc':     return r.dlc != null ? String(r.dlc) : '';
+        case 'data':    return r.data ?? '';
+        case 'flags':   return r.flags ?? '';
+        case 'diagId':  return r.diagId ?? '';
+        case 'src':     return r.src ?? '';
+        case 'dst':     return r.dst ?? '';
+        case 'conn':    return r.conn != null ? String(r.conn) : '';
+        case 'service': return r.service ?? '';
+        default: return '';
+      }
+    });
+    acc.push(cells.join('\t'));
+    return acc;
+  }, []);
+  copyText([showHeaders.join('\t'), ...body].join('\n'));
+}
+
+// Context menu keyboard nav — intercept events in either menu/submenu
+function onCtxMenuKeydown(e) {
+  const root  = e.currentTarget;
+  const items = [...root.querySelectorAll('.ctx-item, .color-swatch')];
+  if (items.length === 0) return;
+  let idx = items.indexOf(document.activeElement);
+
+  // Always stop propagation while the menu is open — otherwise arrow keys
+  // also reach the global row-navigation handler underneath.
+  e.stopPropagation();
+
+  switch (e.key) {
+    case 'ArrowDown':
+    case 'ArrowRight':
+      e.preventDefault();
+      idx = (idx + 1) % items.length;
+      items[idx].focus();
+      break;
+    case 'ArrowUp':
+    case 'ArrowLeft':
+      e.preventDefault();
+      idx = (idx - 1 + items.length) % items.length;
+      items[idx].focus();
+      break;
+    case 'Home':
+      e.preventDefault();
+      items[0].focus();
+      break;
+    case 'End':
+      e.preventDefault();
+      items[items.length - 1].focus();
+      break;
+    case 'Enter':
+    case ' ':
+      e.preventDefault();
+      if (document.activeElement) { document.activeElement.click(); }
+      break;
+    case 'Escape':
+      e.preventDefault();
+      closeCtxMenu();
+      break;
+  }
+}
+ctxMenu.addEventListener('keydown',    onCtxMenuKeydown);
+ctxSubmenu.addEventListener('keydown', onCtxMenuKeydown);
+
+document.addEventListener('keydown', e => {
+  const tag = e.target.tagName;
+
+  // Allow F3 / Ctrl+G through even from inputs
+  if (e.key === 'F3' || (e.ctrlKey || e.metaKey) && e.key === 'g') { /* fall through */ }
+  else if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') { return; }
+
+  // Ctrl+F / Cmd+F — focus ID filter
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+    e.preventDefault();
+    document.getElementById('fId').focus();
+    return;
+  }
+
+  // F3 / Shift+F3 — search next/prev
+  if (e.key === 'F3' && !e.shiftKey) { e.preventDefault(); runSearch('forward',  false); return; }
+  if (e.key === 'F3' &&  e.shiftKey) { e.preventDefault(); runSearch('backward', false); return; }
+
+  // Ctrl+G / Ctrl+Shift+G — search next/prev (vi-style)
+  if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
+    e.preventDefault();
+    runSearch(e.shiftKey ? 'backward' : 'forward', false);
+    return;
+  }
+
+  // All remaining handlers require no text input to be focused
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+  const moveTo = (next) => {
+    if (next < 0 || next >= totalFiltered || next === selectedRowI) return;
+    selectedSet.clear();
+    selectedRowI = next;
+    lastClickedI = next;
+    scrollToRow(next);
+    renderViewport();
+    updateSelCount();
+  };
+
+  // Ctrl+C — copy selected as TSV
+  if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+    if (selectedSet.size > 0 || selectedRowI >= 0) {
+      e.preventDefault();
+      copySelectedAsTsv();
+    }
+    return;
+  }
+
+  // Arrow / Page / Home / End navigation
+  if (e.key === 'ArrowDown')  { e.preventDefault(); moveTo(selectedRowI + 1); return; }
+  if (e.key === 'ArrowUp')    { e.preventDefault(); moveTo(selectedRowI - 1); return; }
+  if (e.key === 'PageDown')   { e.preventDefault(); moveTo(selectedRowI + Math.max(1, Math.floor(scroller.clientHeight / ROW_H) - 1)); return; }
+  if (e.key === 'PageUp')     { e.preventDefault(); moveTo(selectedRowI - Math.max(1, Math.floor(scroller.clientHeight / ROW_H) - 1)); return; }
+  if (e.key === 'Home')       { e.preventDefault(); moveTo(0); return; }
+  if (e.key === 'End')        { e.preventDefault(); moveTo(totalFiltered - 1); return; }
+
+  // Enter — open detail for selected row
+  if (e.key === 'Enter' && selectedRowI >= 0) {
+    e.preventDefault();
+    const m = getCachedRow(selectedRowI);
+    if (m) showDetail(m);
+    return;
+  }
+
+  // Escape — close detail panel
+  if (e.key === 'Escape') {
+    if (!detailPanel.classList.contains('hidden')) {
+      e.preventDefault();
+      detailPanel.classList.add('hidden');
+      document.getElementById('btnDetail').classList.remove('active');
+      document.getElementById('btnDetail').setAttribute('aria-pressed', 'false');
+    }
+    return;
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COPY HELPER
+// ─────────────────────────────────────────────────────────────────────────────
+
+function copyText(text) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => showToast('Copied!')).catch(fallbackCopy.bind(null, text));
+  } else {
+    fallbackCopy(text);
+  }
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); showToast('Copied!'); } catch {}
+  ta.remove();
+}
+
+let toastTimer;
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1800);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DETAIL PANEL
+// ─────────────────────────────────────────────────────────────────────────────
+
+function showDetail(m) {
+  if (!m || !detailBody) return;
+  const bytes = m.data ? m.data.split(' ').filter(Boolean) : [];
+  const color = rowColors.get(m.i);
+
+  let html =
+    dr('Index',     m.i + 1) +
+    dr('Rel. Time', '<span style="color:var(--blue)">' + esc(m.t) + ' s</span>') +
+    dr('UTC',       '<span style="color:var(--blue)">' + esc(m.utc) + '</span>') +
+    dr('Arb. ID',   '<span style="color:#e8c8a0">' + esc(m.id) + '</span>') +
+    (m.msgName ? dr('Name', '<span style="color:var(--purple);font-weight:500">' + esc(m.msgName) + '</span>') : '') +
+    dr('Type',      esc(m.type)) +
+    dr('Direction', esc(m.dir)) +
+    dr('Channel',   m.ch) +
+    dr('DLC',       m.dlc) +
+    dr('Flags',     esc(m.flags) || '—') +
+    (m.diagId ? dr('Diag ID', '<span style="color:var(--yellow);font-weight:500">' + esc(m.diagId) + '</span>') : '') +
+    (m.service ? dr('Service', '<span style="color:var(--purple);font-weight:500">' + esc(m.service) + '</span>') : '') +
+    (m.src ? dr('Src', '<span style="color:var(--blue)">' + esc(m.src) + '</span>') : '') +
+    (m.dst ? dr('Dst', '<span style="color:var(--blue)">' + esc(m.dst) + '</span>') : '') +
+    (m.conn !== undefined ? dr('Conn', esc(String(m.conn))) : '') +
+    (color ? dr('Color', '<span style="text-transform:capitalize">' + color + '</span>') : '');
+
+  if (bytes.length > 0) {
+    html += '<div style="padding:8px 14px 4px;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--fg2)">Bytes</div>';
+    html += '<div class="byte-idx-row">' + bytes.map((_,i) => '<span class="byte-idx">' + i + '</span>').join('') + '</div>';
+    html += '<div class="byte-row">'     + bytes.map(b   => {
+      const isBracketed = b.startsWith('[') && b.endsWith(']');
+      const style = isBracketed ? 'font-size:10px;color:var(--fg2);width:32px;' : '';
+      return '<div class="byte-cell" style="' + style + '">' + esc(b) + '</div>';
+    }).join('') + '</div>';
+    html += '<div style="padding:4px 14px 8px"><table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px">';
+    html += '<tr>' + ['B','Hex','Dec','Bin'].map(h =>
+      '<th style="color:var(--fg2);text-align:left;padding:2px 6px;font-size:10px">' + h + '</th>').join('') + '</tr>';
+    bytes.forEach((b, i) => {
+      const cleanB = b.replace(/[\[\]]/g, '');
+      const d = parseInt(cleanB, 16);
+      html += '<tr>' +
+        '<td style="color:var(--fg2);padding:2px 6px">'  + i + '</td>' +
+        '<td style="color:#9cdcfe;padding:2px 6px">'     + esc(cleanB) + '</td>' +
+        '<td style="padding:2px 6px">'                    + (isNaN(d) ? '—' : d) + '</td>' +
+        '<td style="color:#b5cea8;padding:2px 6px;letter-spacing:.1em">' + (isNaN(d) ? '—' : d.toString(2).padStart(8,'0')) + '</td>' +
+        '</tr>';
+    });
+    html += '</table></div>';
+  } else {
+    html += '<div style="padding:8px 14px;color:var(--fg2);font-size:12px">No data bytes</div>';
+  }
+
+  // Decoded signals section (shown when a DBC is loaded and the message matched)
+  if (m.signals && m.signals.length > 0) {
+    html += '<div class="sig-section-head">Signals</div>';
+    m.signals.forEach(s => {
+      const valPart = s.valueLabel
+        ? '<span class="sig-label">' + esc(s.valueLabel) + '</span>'
+        : '<span class="sig-phys">'  + esc(s.physStr)    + '</span>';
+      html +=
+        '<div class="sig-item">' +
+          '<div class="sig-name">' + esc(s.name) + '</div>' +
+          '<div class="sig-vals">' +
+            '<span class="sig-raw">' + esc(s.rawHex) + '</span>' +
+            valPart +
+          '</div>' +
+          (s.comment ? '<div class="sig-comment">' + esc(s.comment) + '</div>' : '') +
+        '</div>';
+    });
+  }
+
+  detailBody.innerHTML = html;
+}
+
+function dr(k, v) {
+  return '<div class="d-row"><span class="d-key">' + k + '</span><span class="d-val">' + v + '</span></div>';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FILTER CONTROLS
+// ─────────────────────────────────────────────────────────────────────────────
+
+const fId   = document.getElementById('fId');
+const fData = document.getElementById('fData');
+const fDir  = document.getElementById('fDir');
+const fType = document.getElementById('fType');
+const fCh   = document.getElementById('fCh');
+const dbcChannelSelect = document.getElementById('dbcChannel');
+const filterIdWrap = document.getElementById('filterIdWrap');
+const filterResize = document.getElementById('filterResize');
+const sId   = document.getElementById('sId');
+const sData = document.getElementById('sData');
+const sDir  = document.getElementById('sDir');
+const sType = document.getElementById('sType');
+const sCh   = document.getElementById('sCh');
+
+const savedFilterIdWidth = Number(localStorage.getItem('blf.filterIdWidth') || 0);
+if (filterIdWrap && savedFilterIdWidth > 0) {
+  const maxWidth = Math.max(260, Math.min(window.innerWidth * 0.8, 960));
+  filterIdWrap.style.width = Math.max(260, Math.min(maxWidth, savedFilterIdWidth)) + 'px';
+}
+
+function onFilterChange() {
+  filter.id      = (fId?.value   ?? '').trim().toLowerCase();
+  filter.data    = (fData?.value ?? '').trim().toLowerCase();
+  filter.dir     = fDir?.value   ?? '';
+  filter.msgType = fType?.value  ?? '';
+  filter.channel = fCh?.value    ?? '';
+  resetAndRefetch();  // clears cache, resets scroll, fires requestPage
+}
+
+fId?.addEventListener('input',   onFilterChange);
+fData?.addEventListener('input', onFilterChange);
+fDir?.addEventListener('change', onFilterChange);
+fType?.addEventListener('change',onFilterChange);
+fCh?.addEventListener('change',  onFilterChange);
+
+let filterResizePointerId = null;
+let filterResizeStartX = 0;
+let filterResizeStartW = 0;
+
+function filterWidthBounds() {
+  return {
+    min: 260,
+    max: Math.max(260, Math.min(window.innerWidth * 0.8, 960)),
+  };
+}
+
+filterResize?.addEventListener('pointerdown', e => {
+  if (!filterIdWrap) { return; }
+  e.preventDefault();
+  filterResizePointerId = e.pointerId;
+  filterResizeStartX = e.clientX;
+  filterResizeStartW = filterIdWrap.getBoundingClientRect().width;
+  filterResize.classList.add('active');
+  filterResize.setPointerCapture(e.pointerId);
+});
+
+filterResize?.addEventListener('pointermove', e => {
+  if (!filterIdWrap || filterResizePointerId !== e.pointerId) { return; }
+  const bounds = filterWidthBounds();
+  const next = Math.max(bounds.min, Math.min(bounds.max, filterResizeStartW + e.clientX - filterResizeStartX));
+  filterIdWrap.style.width = next + 'px';
+});
+
+function endFilterResize(e) {
+  if (!filterIdWrap || filterResizePointerId !== e.pointerId) { return; }
+  filterResizePointerId = null;
+  filterResize?.classList.remove('active');
+  localStorage.setItem('blf.filterIdWidth', String(Math.round(filterIdWrap.getBoundingClientRect().width)));
+  filterResize?.releasePointerCapture(e.pointerId);
+}
+
+filterResize?.addEventListener('pointerup', endFilterResize);
+filterResize?.addEventListener('pointercancel', endFilterResize);
+
+// ── Search ID resize ──────────────────────────────────────────────────────────
+
+const searchIdWrap  = document.getElementById('searchIdWrap');
+const searchResize  = document.getElementById('searchResize');
+
+const savedSearchIdWidth = Number(localStorage.getItem('blf.searchIdWidth') || 0);
+if (searchIdWrap && savedSearchIdWidth > 0) {
+  const maxW = Math.max(160, Math.min(window.innerWidth * 0.8, 960));
+  searchIdWrap.style.width = Math.max(160, Math.min(maxW, savedSearchIdWidth)) + 'px';
+}
+
+let searchResizePointerId = null;
+let searchResizeStartX = 0;
+let searchResizeStartW = 0;
+
+function searchIdWidthBounds() {
+  return { min: 160, max: Math.max(160, Math.min(window.innerWidth * 0.8, 960)) };
+}
+
+searchResize?.addEventListener('pointerdown', e => {
+  if (!searchIdWrap) { return; }
+  e.preventDefault();
+  searchResizePointerId = e.pointerId;
+  searchResizeStartX = e.clientX;
+  searchResizeStartW = searchIdWrap.getBoundingClientRect().width;
+  searchResize.classList.add('active');
+  searchResize.setPointerCapture(e.pointerId);
+});
+
+searchResize?.addEventListener('pointermove', e => {
+  if (!searchIdWrap || searchResizePointerId !== e.pointerId) { return; }
+  const bounds = searchIdWidthBounds();
+  const next = Math.max(bounds.min, Math.min(bounds.max, searchResizeStartW + e.clientX - searchResizeStartX));
+  searchIdWrap.style.width = next + 'px';
+});
+
+function endSearchResize(e) {
+  if (!searchIdWrap || searchResizePointerId !== e.pointerId) { return; }
+  searchResizePointerId = null;
+  searchResize?.classList.remove('active');
+  localStorage.setItem('blf.searchIdWidth', String(Math.round(searchIdWrap.getBoundingClientRect().width)));
+  searchResize?.releasePointerCapture(e.pointerId);
+}
+
+searchResize?.addEventListener('pointerup', endSearchResize);
+searchResize?.addEventListener('pointercancel', endSearchResize);
+
+// ── Search match counter ──────────────────────────────────────────────────────
+
+function updateSearchMatchCount() {
+  const el = document.getElementById('searchMatchCount');
+  if (!el) { return; }
+  el.textContent = (searchMatchPos > 0 && searchTotal > 0)
+    ? searchMatchPos + ' / ' + searchTotal
+    : '';
+}
+
+function getSearchState() {
+  return {
+    id:      (sId?.value   ?? '').trim().toLowerCase(),
+    data:    (sData?.value ?? '').trim().toLowerCase(),
+    dir:     sDir?.value   ?? '',
+    msgType: sType?.value  ?? '',
+    channel: sCh?.value    ?? '',
+  };
+}
+
+function hasSearchCriteria(search) {
+  return Boolean(search.id || search.data || search.dir || search.msgType || search.channel);
+}
+
+function runSearchNext() {
+  const search = getSearchState();
+  if (!hasSearchCriteria(search)) { showToast('Enter search criteria'); return; }
+
+  const key = JSON.stringify(search);
+  const isNew = key !== lastSearchKey;
+  if (isNew) {
+    lastSearchKey  = key;
+    searchMatchPos = 0;
+    searchTotal    = 0;
+    searchHitRowI  = -1;
+  }
+  pendingSearchDir = 'forward';
+
+  vscode.postMessage({
+    type: 'searchFirst',
+    filter: { ...filter },
+    sort: { ...sort },
+    search,
+    fromIndex:  isNew ? 0 : searchHitRowI + 1,
+    direction:  'forward',
+  });
+}
+
+function runSearchPrev() {
+  const search = getSearchState();
+  if (!hasSearchCriteria(search)) { showToast('Enter search criteria'); return; }
+
+  const key = JSON.stringify(search);
+  const isNew = key !== lastSearchKey;
+  if (isNew) {
+    lastSearchKey  = key;
+    searchMatchPos = 0;
+    searchTotal    = 0;
+    searchHitRowI  = -1;
+  }
+  pendingSearchDir = 'backward';
+
+  vscode.postMessage({
+    type: 'searchFirst',
+    filter: { ...filter },
+    sort: { ...sort },
+    search,
+    // When starting a new backward search, use MAX_SAFE_INTEGER so the host's
+    // Math.min(beforeIndex-1, length-1) clamps to the last row.
+    fromIndex:  isNew ? Number.MAX_SAFE_INTEGER : searchHitRowI,
+    direction:  'backward',
+  });
+}
+
+document.getElementById('btnSearchNext')?.addEventListener('click', runSearchNext);
+document.getElementById('btnSearchPrev')?.addEventListener('click', runSearchPrev);
+[sId, sData, sDir, sType, sCh].forEach(el => {
+  el?.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') { runSearchNext(); }
+  });
+});
+
+document.getElementById('btnClearSearch')?.addEventListener('click', () => {
+  if (sId)   { sId.value   = ''; }
+  if (sData) { sData.value = ''; }
+  if (sDir)  { sDir.value  = ''; }
+  if (sType) { sType.value = ''; }
+  if (sCh)   { sCh.value   = ''; }
+  searchHitRowI  = -1;
+  searchMatchPos = 0;
+  searchTotal    = 0;
+  lastSearchKey  = '';
+  updateSearchMatchCount();
+  renderViewport();
+});
+
+document.getElementById('btnClear').addEventListener('click', () => {
+  if (fId)   fId.value   = '';
+  if (fData) fData.value = '';
+  if (fDir)  fDir.value  = '';
+  if (fType) fType.value = '';
+  if (fCh)   fCh.value   = '';
+  onFilterChange();
+});
+
+document.getElementById('btnDetail').addEventListener('click', function() {
+  detailPanel.classList.toggle('hidden');
+  this.classList.toggle('active');
+  const pressed = this.classList.contains('active');
+  this.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+});
+
+document.getElementById('btnImportDbc').addEventListener('click', () => {
+  vscode.postMessage({ type: 'openDbcFile' });
+});
+
+dbcChannelSelect?.addEventListener('change', () => {
+  const value = dbcChannelSelect.value;
+  vscode.postMessage({
+    type: 'setDbcChannel',
+    channel: value === '' ? null : Number(value),
+  });
+});
+
+document.getElementById('btnClearDbc').addEventListener('click', () => {
+  vscode.postMessage({ type: 'clearDbc' });
+});
+
+document.getElementById('btnImportCdd')?.addEventListener('click', () => {
+  vscode.postMessage({ type: 'openCddFile' });
+});
+
+document.getElementById('btnClearCdd')?.addEventListener('click', () => {
+  vscode.postMessage({ type: 'clearCdd' });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCROLL LISTENER
+// ─────────────────────────────────────────────────────────────────────────────
+
+scroller.addEventListener('scroll', () => requestAnimationFrame(renderViewport), { passive: true });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HOST MESSAGE HANDLER
+// ─────────────────────────────────────────────────────────────────────────────
+
+window.addEventListener('message', ({ data: msg }) => {
+
+  // ── init ──────────────────────────────────────────────────────────────────
+  if (msg.type === 'init') {
+    const h   = msg.header;
+    const dur = h && h.startTimestamp > 0 && h.stopTimestamp > h.startTimestamp ? h.stopTimestamp - h.startTimestamp : 0;
+
+    setText('s-total', msg.totalCount.toLocaleString());
+    setText('s-dur',   dur.toFixed(2) + 's');
+    setText('s-rate',  dur > 0 ? Math.round(msg.totalCount / dur).toLocaleString() : '—');
+    setText('s-ids',   (msg.uniqueIds ?? '—').toLocaleString());
+    setText('s-ch',    (msg.channels ?? []).map(c => 'Ch' + c).join(', ') || '—');
+    setText('s-fd',    (msg.fdCount ?? 0).toLocaleString());
+
+    if (h) setText('topTime',
+      new Date(h.startTimestamp * 1000).toISOString().replace('T',' ').slice(0,23) + ' UTC');
+
+    document.getElementById('s-rxtx').innerHTML =
+      '<span style="color:var(--green)">' + (msg.rxCount ?? 0).toLocaleString() + '</span>' +
+      ' / <span style="color:var(--purple)">' + (msg.txCount ?? 0).toLocaleString() + '</span>';
+
+    // Populate channel dropdown
+    (msg.channels ?? []).forEach(c => {
+      const o = document.createElement('option');
+      o.value = String(c); o.textContent = 'Ch ' + c;
+      fCh?.appendChild(o);
+
+      const so = document.createElement('option');
+      so.value = String(c); so.textContent = 'Ch ' + c;
+      sCh?.appendChild(so);
+
+      const dbo = document.createElement('option');
+      dbo.value = String(c); dbo.textContent = 'Ch ' + c;
+      dbcChannelSelect?.appendChild(dbo);
+    });
+
+    // Parse errors
+    if (msg.errors?.length) {
+      document.getElementById('errorsBar')?.classList.add('visible');
+      const errEl = document.getElementById('errSummary');
+      if (errEl) errEl.innerHTML = ico('warn') + ' ' + msg.errors.length + ' parse warning' + (msg.errors.length > 1 ? 's' : '');
+      const el = document.getElementById('errList');
+      if (el) el.innerHTML = msg.errors.map(esc).join('<br>');
+    }
+
+    totalFiltered = msg.totalCount;
+
+    // Inject the empty-state element into the spacer once
+    if (!document.getElementById('emptyState')) {
+      const emp = document.createElement('div');
+      emp.id = 'emptyState';
+      emp.className = 'empty-state hidden';
+      emp.innerHTML = '<span style="font-size:28px">' + ico('search') + '</span><span>No messages match the current filter.</span>';
+      spacer.appendChild(emp);
+    }
+
+    buildHeader();
+    updateSpacerHeight();
+    overlay.style.display = 'none';
+
+    // Kick off page 0
+    pending.add(0);
+    vscode.postMessage({
+      type: 'requestPage', startIndex: 0, count: PAGE_SZ,
+      filter: { ...filter }, sort: { ...sort },
+    });
+  }
+
+  // ── page ──────────────────────────────────────────────────────────────────
+  else if (msg.type === 'page') {
+    pending.delete(msg.startIndex);
+    pageCache.set(msg.startIndex, msg.rows);
+
+    // Page 0 always carries the definitive post-filter total.
+    // We update it here so the spacer, row count, and empty-state all
+    // reflect the real answer even when resetAndRefetch set it to 0 first.
+    if (msg.startIndex === 0) {
+      totalFiltered = msg.totalFiltered;
+      updateSpacerHeight();
+      rCountEl.textContent = totalFiltered.toLocaleString() + ' rows';
+    }
+
+    renderViewport();
+  }
+
+  // ── searchResult ─────────────────────────────────────────────────────────
+  else if (msg.type === 'searchResult') {
+    if (msg.index < 0) {
+      showToast(msg.message || 'No matching message found');
+      return;
+    }
+
+    if (msg.total !== undefined && msg.total > 0) { searchTotal = msg.total; }
+
+    if (searchMatchPos === 0) {
+      // First result: forward → pos 1, backward → pos N (last match)
+      searchMatchPos = pendingSearchDir === 'backward' ? (searchTotal || 1) : 1;
+    } else if (pendingSearchDir === 'forward') {
+      searchMatchPos = searchTotal > 0 ? (searchMatchPos % searchTotal) + 1 : 1;
+    } else {
+      searchMatchPos = searchMatchPos <= 1 ? (searchTotal || 1) : searchMatchPos - 1;
+    }
+
+    searchHitRowI = msg.index;
+    updateSearchMatchCount();
+
+    selectedSet.clear();
+    selectedRowI = msg.index;
+    lastClickedI = msg.index;
+    updateSelCount();
+    if (msg.row) { showDetail(msg.row); }
+
+    scroller.scrollTop = Math.max(0, msg.index * ROW_H - ROW_H * 3);
+    requestPagesForRange(msg.index, msg.index);
+    renderViewport();
+  }
+
+  // ── error ─────────────────────────────────────────────────────────────────
+  else if (msg.type === 'error') {
+    overlay.innerHTML =
+      '<div style="background:rgba(241,76,76,.1);border:1px solid rgba(241,76,76,.4);' +
+      'border-radius:6px;padding:20px 24px;max-width:500px">' +
+      '<div style="color:#f48771;font-weight:600;margin-bottom:8px">' + ico('warn') + ' Parse error</div>' +
+      '<pre style="font-family:var(--mono);font-size:12px;white-space:pre-wrap">' + esc(msg.message) + '</pre>' +
+      '</div>';
+  }
+
+  // ── dbcLoaded ─────────────────────────────────────────────────────────────
+  else if (msg.type === 'dbcLoaded') {
+    dbcLoaded   = true;
+    dbcFileName = msg.fileName;
+
+    const badge    = document.getElementById('dbcBadge');
+    const clearBtn = document.getElementById('btnClearDbc');
+    if (badge)    { badge.textContent = msg.fileName + '  (' + msg.messageCount + ' msg)'; badge.style.display = 'inline-flex'; }
+    if (dbcChannelSelect) { dbcChannelSelect.value = ''; dbcChannelSelect.style.display = 'inline-flex'; }
+    if (clearBtn) { clearBtn.style.display = 'inline-flex'; }
+
+    updateNameCol();
+    buildHeader();
+
+    showToast('DBC loaded: ' + msg.fileName);
+
+    // Invalidate page cache — cached rows pre-date the DBC and lack msgName/signals
+    resetAndRefetch();
+  }
+
+  // ── dbcChannelChanged ────────────────────────────────────────────────────
+  else if (msg.type === 'dbcChannelChanged') {
+    if (dbcChannelSelect) { dbcChannelSelect.value = msg.channel === null ? '' : String(msg.channel); }
+    showToast(msg.channel === null ? 'DBC applied to all channels' : 'DBC applied to Ch ' + msg.channel);
+    resetAndRefetch();
+  }
+
+  // ── dbcCleared ────────────────────────────────────────────────────────────
+  else if (msg.type === 'dbcCleared') {
+    dbcLoaded   = false;
+    dbcFileName = '';
+
+    const badge    = document.getElementById('dbcBadge');
+    const clearBtn = document.getElementById('btnClearDbc');
+    if (badge)    { badge.style.display = 'none'; }
+    if (dbcChannelSelect) { dbcChannelSelect.value = ''; dbcChannelSelect.style.display = 'none'; }
+    if (clearBtn) { clearBtn.style.display = 'none'; }
+
+    updateNameCol();
+    buildHeader();
+
+    resetAndRefetch();
+  }
+
+  // ── cddLoaded ─────────────────────────────────────────────────────────────
+  else if (msg.type === 'cddLoaded') {
+    const badge    = document.getElementById('cddBadge');
+    const clearBtn = document.getElementById('btnClearCdd');
+    const suffix   = msg.active ? '' : '  — inactive';
+    if (badge)    { badge.textContent = msg.fileName + '  (' + msg.serviceCount + ' services)' + suffix; badge.style.display = 'inline-flex'; }
+    if (clearBtn) { clearBtn.style.display = 'inline-flex'; }
+
+    // Diagnostic columns (incl. Name) track whether reconstruction actually ran —
+    // this also retracts them when an active CDD is replaced by an inactive one.
+    cddActive = msg.active;
+    ['diagId', 'src', 'dst', 'conn', 'service'].forEach(key => {
+      const col = cols.find(c => c.key === key);
+      if (col) { col.visible = msg.active; }
+    });
+    updateNameCol();
+    buildHeader();
+
+    if (msg.active) {
+      showToast('CDD loaded: ' + msg.fileName);
+    } else {
+      showToast('CDD loaded but no Request/Response CAN-ID found — diagnostics inactive');
+    }
+
+    resetAndRefetch();
+  }
+
+  // ── cddCleared ────────────────────────────────────────────────────────────
+  else if (msg.type === 'cddCleared') {
+    const badge    = document.getElementById('cddBadge');
+    const clearBtn = document.getElementById('btnClearCdd');
+    if (badge)    { badge.style.display = 'none'; }
+    if (clearBtn) { clearBtn.style.display = 'none'; }
+
+    // Automatically hide diagnostic columns; Name stays if a DBC is still loaded
+    cddActive = false;
+    ['diagId', 'src', 'dst', 'conn', 'service'].forEach(key => {
+      const col = cols.find(c => c.key === key);
+      if (col) { col.visible = false; }
+    });
+    updateNameCol();
+    buildHeader();
+
+    resetAndRefetch();
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UTILITIES
+// ─────────────────────────────────────────────────────────────────────────────
+
+function esc(s) {
+  if (typeof s !== 'string') return String(s ?? '');
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function ico(name) {
+  // 16×16 inline SVG icons matching VS Code codicon style.
+  // No external resources — CSP 'font-src: none' stays intact.
+  const ICONS = {
+    'antenna': '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 1c-2 0-3.7.8-4.9 2.1l.7.7C4.7 2.6 6.2 2 8 2s3.3.6 4.2 1.8l.7-.7A6.7 6.7 0 0 0 8 1zM6.5 10a3.5 3.5 0 0 1 3 0l.5-1c-1.2-.7-2.8-.7-4 0l.5 1zM8 6c-.9 0-1.7.3-2.3.9l.7.7c.4-.4 1-.6 1.6-.6s1.2.2 1.6.6l.7-.7C9.7 6.3 8.9 6 8 6zM3.5 4.5l.7.7A5.4 5.4 0 0 1 8 3c1.5 0 2.8.6 3.8 1.6l.7-.7A6.5 6.5 0 0 0 8 2a6.4 6.4 0 0 0-4.5 2.5z"/></svg>',
+    'x': '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>',
+    'search': '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M6.5.5a6 6 0 1 0 2.4 11.5l3.5 3.5 1.4-1.4-3.5-3.5A6 6 0 0 0 6.5.5zm0 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8z"/></svg>',
+    'warn': '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 1.5L1 14h14L8 1.5zM9 11H7v2h2v-2zm0-5v4H7V6h2z"/></svg>',
+    'check': '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M13.2 4.2a.7.7 0 0 1 0 1l-7 7a.7.7 0 0 1-1 0l-3.5-3.5a.7.7 0 0 1 1-1L5.7 10l6.5-6.5a.7.7 0 0 1 1 0z"/></svg>',
+    'pin': '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M9.828 1a1.5 1.5 0 0 1 2.657-.262l2.777 2.777a1.5 1.5 0 0 1-.262 2.657l-1.463.538.96 4.157-2.364 2.364-4.157-.96-.538 1.463a1.5 1.5 0 0 1-2.657.262L2 9.172a1.5 1.5 0 0 1 .262-2.657l1.463-.538L4.085 1.82l2.364-2.364 4.157.96.538-1.463L9.828 1z"/></svg>',
+    'palette': '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 1C4.1 1 1 4.1 1 8s3.1 7 7 7c.5 0 1-.4 1-1 0-.2-.1-.5-.1-.6-.2-.6.3-1.4 1-1.4h1c2.8 0 5-2.2 5-5 0-3.3-3.6-6-7-6zM4 9c-.6 0-1-.4-1-1s.4-1 1-1 1 .4 1 1-.4 1-1 1zm1.5-3c-.6 0-1-.4-1-1s.4-1 1-1 1 .4 1 1-.4 1-1 1zM11 9c-.6 0-1-.4-1-1s.4-1 1-1 1 .4 1 1-.4 1-1 1zm-.5-3c-.6 0-1-.4-1-1s.4-1 1-1 1 .4 1 1-.4 1-1 1z"/></svg>',
+    'next': '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M5.5 3l7 5-7 5V3z"/></svg>',
+    'prev': '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M10.5 3l-7 5 7 5V3z"/></svg>',
+  };
+  return ICONS[name] || '';
+}
+
+function csvCell(v) {
+  const s = String(v ?? '');
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+})();
