@@ -36,8 +36,14 @@ export class BLFViewProvider implements vscode.CustomReadonlyEditorProvider {
 
     const fileName = path.basename(document.uri.fsPath);
 
+    // Bundled by esbuild (see esbuild.js) and inlined into the HTML under the CSP nonce.
+    const webviewJs = fs.readFileSync(
+      path.join(this.context.extensionUri.fsPath, 'dist', 'webview.js'),
+      'utf8'
+    );
+
     // Paint the shell immediately — zero data, instant first paint
-    webviewPanel.webview.html = getWebviewHtml(getNonce(), fileName);
+    webviewPanel.webview.html = getWebviewHtml(getNonce(), fileName, webviewJs);
 
     // Parse in the background; the extension host is the single owner of data
     let originalMessages: import('./blf-parser').CANMessage[] | null =
